@@ -1,332 +1,485 @@
+// content.js — runs in the ChatGPT/Claude page
+// Responsibilities: DOM scanning, branch navigation
+// Communicates with sidepanel.js via background.js message passing
+
 (() => {
-  const KEY = 'cbv_state_v1';
-  const HOVER_DELAY = 140;
+  'use strict';
 
-  let state = {
-    convKey: getConversationKey(),
-    nodes: [],
-    children: {},
-    roots: [],
-    activeNodeId: null,
-    previewNodeId: null
-  };
+  const NAV_WAIT_MS   = 500;   // ms to wait after each button click
+  const NAV_TIMEOUT   = 3000;  // ms before nav is considered stuck
+  const NAV_RETRIES   = 2;     // retry attempts if nav appears stuck
+  const DEBOUNCE_MS   = 1200;
+  const PLATFORM      = detectPlatform();
 
-  let panel;
-  let hoverTimer;
+  let mutTimer  = null;
+  let observer  = null;
+  let building  = false;
+  let cancelled = false;  // set to true by CANCEL command
 
-  const msgCache = new Map(); // id -> element
+  // ── Platform ────────────────────────────────────────────────────────────────
+  function detectPlatform() {
+    const h = location.hostname;
+    if (h.includes('chatgpt.com') || h.includes('chat.openai.com')) return 'chatgpt';
+    if (h.includes('claude.ai'))  return 'claude';
+    return 'unknown';
+  }
 
+  // ── Boot ────────────────────────────────────────────────────────────────────
   init();
 
-  async function init() {
-    await loadState();
-    buildPanel();
-    if (!state.nodes.length) refreshFromDOM();
-    bindHotkeys();
-    renderPanel();
+  function init() {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      handleMessage(msg).then(sendResponse);
+      return true; // async
+    });
+    startObserver();
+    sendToPanel({ type: 'PAGE_READY', platform: PLATFORM, url: location.href });
   }
 
-  function getConversationKey() {
-    return location.origin + location.pathname;
-  }
-
-  function uid(prefix='n') {
-    return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
-  }
-
-  async function loadState() {
-    const all = await chrome.storage.local.get(KEY);
-    const byConv = all[KEY] || {};
-    if (byConv[state.convKey]) {
-      state = { ...state, ...byConv[state.convKey], convKey: state.convKey };
+  // ── Message handler ──────────────────────────────────────────────────────────
+  async function handleMessage(msg) {
+    switch (msg.type) {
+      case 'BUILD':
+        return await cmdBuild();
+      case 'CANCEL':
+        return cmdCancel();
+      case 'QUICK_SCAN':
+        return { type: 'SCAN_RESULT', turns: serializeTurns(readRawTurns()) };
+      case 'NAVIGATE':
+        return await cmdNavigate(msg.path);
+      default:
+        return { ok: false };
     }
   }
 
-  async function saveState() {
-    const all = await chrome.storage.local.get(KEY);
-    const byConv = all[KEY] || {};
-    byConv[state.convKey] = {
-      nodes: state.nodes,
-      children: state.children,
-      roots: state.roots,
-      activeNodeId: state.activeNodeId
-    };
-    await chrome.storage.local.set({ [KEY]: byConv });
+  // ── Send to sidepanel (via background) ───────────────────────────────────────
+  function sendToPanel(msg) {
+    chrome.runtime.sendMessage(msg).catch(() => {});
   }
 
-  function buildPanel() {
-    if (document.getElementById('cbv-panel')) return;
-    panel = document.createElement('aside');
-    panel.id = 'cbv-panel';
-    panel.innerHTML = `
-      <div class="cbv-header">
-        <div class="cbv-title">Branch Visualizer (MVP)</div>
-        <div class="cbv-actions">
-          <button id="cbv-refresh">Refresh</button>
-          <button id="cbv-hide">Hide</button>
-        </div>
-      </div>
-      <div class="cbv-badge" id="cbv-status">Ready</div>
-      <div id="cbv-tree"></div>
-    `;
-    document.body.appendChild(panel);
-
-    panel.querySelector('#cbv-refresh').addEventListener('click', () => {
-      refreshFromDOM();
-    });
-
-    panel.querySelector('#cbv-hide').addEventListener('click', () => {
-      panel.style.display = 'none';
-      ensureShowButton();
-    });
+  // ── CANCEL command ────────────────────────────────────────────────────────────
+  function cmdCancel() {
+    if (!building) return { ok: false, reason: 'not_building' };
+    cancelled = true;
+    return { ok: true };
   }
 
-  function ensureShowButton() {
-    if (document.getElementById('cbv-show-btn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'cbv-show-btn';
-    btn.textContent = '🌿 Branches';
-    Object.assign(btn.style, {
-      position: 'fixed', right: '16px', top: '16px', zIndex: 999999,
-      border: '1px solid #334155', borderRadius: '999px', padding: '8px 12px',
-      background: '#0b1020', color: '#e5e7eb', cursor: 'pointer'
-    });
-    btn.addEventListener('click', () => {
-      panel.style.display = 'block';
-      btn.remove();
-    });
-    document.body.appendChild(btn);
-  }
+  // ── BUILD command: DFS traverse, stream progress ─────────────────────────────
+  async function cmdBuild() {
+    if (building) return { ok: false, reason: 'already_building' };
+    building   = true;
+    cancelled  = false;
+    observer?.disconnect();
 
-  function status(text) {
-    const el = document.getElementById('cbv-status');
-    if (el) el.textContent = text;
-  }
+    const treeNodes = new Map();
 
-  function getMessageElements() {
-    const candidates = [
-      'article',
-      '[data-message-id]',
-      '[data-testid*="conversation"]',
-      '[class*="message"]'
-    ];
-    let els = [];
-    for (const sel of candidates) {
-      const found = Array.from(document.querySelectorAll(sel));
-      if (found.length > els.length) els = found;
+    sendToPanel({ type: 'BUILD_START' });
+
+    try {
+      await dfsCollect(null, 0, treeNodes);
+    } catch (e) {
+      const reason = cancelled ? 'cancelled' : e.message;
+      sendToPanel({ type: cancelled ? 'BUILD_CANCELLED' : 'BUILD_ERROR', message: reason });
+      building   = false;
+      cancelled  = false;
+      startObserver();
+      return { ok: false };
     }
 
-    const filtered = els.filter(el => {
-      const txt = (el.innerText || '').trim();
-      if (!txt) return false;
-      if (txt.length < 8) return false;
-      return true;
+    building  = false;
+    cancelled = false;
+    startObserver();
+
+    const activePath = readCurrentPath();
+    sendToPanel({
+      type:       'BUILD_DONE',
+      nodes:      [...treeNodes.values()],
+      activePath,
     });
 
-    return filtered;
+    // Persist to storage
+    saveToStorage(treeNodes, activePath);
+
+    return { ok: true };
   }
 
-  function detectRole(el) {
-    const text = (el.innerText || '').toLowerCase();
-    if (text.includes('you said') || text.includes('you\n')) return 'user';
-    if (el.querySelector('textarea')) return 'user';
-    return 'assistant';
-  }
-
-  function refreshFromDOM() {
-    const elements = getMessageElements();
-    if (!elements.length) {
-      status('No messages detected. Scroll chat and retry.');
-      return;
+  // ── NAVIGATE command ─────────────────────────────────────────────────────────
+  async function cmdNavigate(path) {
+    for (const step of path) {
+      if (step.branchTotal <= 1) continue;
+      const turns = readRawTurns();
+      const turn  = turns[step.turnIndex];
+      if (!turn) continue;
+      if (turn.branchIndex !== step.branchIndex) {
+        await navigateTurnToBranch(turn, step.branchIndex);
+        await sleep(NAV_WAIT_MS);
+      }
     }
+    const leaf = path[path.length - 1];
+    if (leaf) {
+      const turns = readRawTurns();
+      const t     = turns[leaf.turnIndex];
+      if (t?.article) t.article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const activePath = readCurrentPath();
+    sendToPanel({ type: 'NAV_DONE', activePath });
+    return { ok: true, activePath };
+  }
 
-    msgCache.clear();
-    const linear = [];
-    let parentId = null;
+  // ── DFS tree builder ─────────────────────────────────────────────────────────
+  async function dfsCollect(parentId, turnIdx, treeNodes) {
+    if (cancelled) throw new Error('cancelled');
 
-    elements.forEach((el, idx) => {
-      const id = `m_${idx}_${hash((el.innerText || '').slice(0, 80))}`;
-      msgCache.set(id, el);
-      linear.push({
-        id,
+    const turns = readRawTurns();
+    if (turnIdx >= turns.length) return;
+
+    const turn           = turns[turnIdx];
+    const branchTotal    = turn.branchTotal;
+    const originalBranch = turn.branchIndex;
+
+    for (let b = 1; b <= branchTotal; b++) {
+      if (cancelled) throw new Error('cancelled');
+
+      // Navigate to branch b
+      const curTurns = readRawTurns();
+      const curTurn  = curTurns[turnIdx];
+      if (!curTurn) break;
+      if (curTurn.branchIndex !== b) {
+        const ok = await navigateTurnToBranch(curTurn, b);
+        if (!ok) {
+          // Log stuck nav as a warning and skip this branch
+          sendToPanel({
+            type:    'BUILD_WARNING',
+            message: `Turn ${turnIdx + 1}: could not reach branch ${b}/${branchTotal} — skipped`,
+          });
+          continue;
+        }
+        await sleep(NAV_WAIT_MS);
+      }
+
+      const freshTurns = readRawTurns();
+      const freshTurn  = freshTurns[turnIdx];
+      if (!freshTurn) break;
+
+      const nodeId = makeNodeId(turnIdx, b, freshTurn.domId);
+      const node = {
+        id:          nodeId,
         parentId,
-        depth: parentId ? (linear[idx - 1]?.depth || 0) + 1 : 0,
-        role: detectRole(el),
-        text: ((el.innerText || '').trim()).replace(/\s+/g, ' ').slice(0, 160),
-        ts: Date.now(),
-        virtual: false
-      });
-      parentId = id;
-    });
+        turnIndex:   turnIdx,
+        branchIndex: b,
+        branchTotal,
+        role:        freshTurn.role,
+        text:        freshTurn.text,
+        children:    [],
+      };
 
-    const children = {};
-    linear.forEach(n => {
-      if (!children[n.parentId || 'root']) children[n.parentId || 'root'] = [];
-      children[n.parentId || 'root'].push(n.id);
-    });
-
-    state.nodes = linear;
-    state.children = children;
-    state.roots = children.root || [];
-    state.activeNodeId = state.activeNodeId || linear[linear.length - 1].id;
-    state.previewNodeId = null;
-
-    saveState();
-    renderPanel();
-    status(`Loaded ${linear.length} nodes`);
-  }
-
-  function renderPanel() {
-    const tree = document.getElementById('cbv-tree');
-    if (!tree) return;
-    tree.innerHTML = '';
-
-    const byId = Object.fromEntries(state.nodes.map(n => [n.id, n]));
-
-    function renderNode(id, depth = 0) {
-      const n = byId[id];
-      if (!n) return;
-
-      const row = document.createElement('div');
-      row.className = `cbv-node cbv-depth-${Math.min(depth, 4)}`;
-      if (id === state.activeNodeId) row.classList.add('active');
-      if (id === state.previewNodeId) row.classList.add('preview');
-
-      row.innerHTML = `
-        <div class="cbv-node-top">
-          <div class="cbv-meta">${n.role} · d${depth}${n.virtual ? ' · branch' : ''}</div>
-          <button class="cbv-branch-btn" data-branch-from="${id}">+Branch</button>
-        </div>
-        <div class="cbv-text">${escapeHtml(n.text || '(empty)')}</div>
-      `;
-
-      row.addEventListener('mouseenter', () => {
-        clearTimeout(hoverTimer);
-        hoverTimer = setTimeout(() => previewNode(id), HOVER_DELAY);
-      });
-      row.addEventListener('mouseleave', () => {
-        clearTimeout(hoverTimer);
-      });
-      row.addEventListener('click', (e) => {
-        if ((e.target).matches('.cbv-branch-btn')) return;
-        pinActive(id);
-      });
-
-      row.querySelector('.cbv-branch-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        branchFrom(id);
-      });
-
-      tree.appendChild(row);
-
-      const kids = state.children[id] || [];
-      kids.forEach(childId => renderNode(childId, depth + 1));
-    }
-
-    (state.roots || []).forEach(r => renderNode(r, 0));
-  }
-
-  function pinActive(id) {
-    state.activeNodeId = id;
-    state.previewNodeId = null;
-    clearHighlights();
-    applyFocusPath(id);
-    renderPanel();
-    saveState();
-    status(`Active: ${short(id)}`);
-  }
-
-  function previewNode(id) {
-    state.previewNodeId = id;
-    renderPanel();
-    clearHighlights();
-    applyFocusPath(id);
-    status(`Preview: ${short(id)} (Esc to restore active)`);
-  }
-
-  function branchFrom(id) {
-    const base = state.nodes.find(n => n.id === id);
-    if (!base) return;
-
-    const newId = uid('b');
-    const branchNode = {
-      id: newId,
-      parentId: id,
-      depth: (base.depth || 0) + 1,
-      role: 'user',
-      text: `Branch from: ${base.text.slice(0, 48)}...`,
-      ts: Date.now(),
-      virtual: true
-    };
-
-    state.nodes.push(branchNode);
-    if (!state.children[id]) state.children[id] = [];
-    state.children[id].push(newId);
-
-    renderPanel();
-    saveState();
-    status(`Created branch ${short(newId)} from ${short(id)}`);
-  }
-
-  function applyFocusPath(targetId) {
-    const path = new Set(ancestorChain(targetId));
-    msgCache.forEach((el, id) => {
-      el.classList.remove('cbv-dim', 'cbv-focus');
-      if (!path.has(id)) {
-        el.classList.add('cbv-dim');
-      } else if (id === targetId) {
-        el.classList.add('cbv-focus');
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!treeNodes.has(nodeId)) {
+        treeNodes.set(nodeId, node);
+      } else {
+        treeNodes.get(nodeId).text = node.text;
       }
-    });
-  }
 
-  function clearHighlights() {
-    msgCache.forEach((el) => el.classList.remove('cbv-dim', 'cbv-focus'));
-  }
-
-  function ancestorChain(id) {
-    const byId = Object.fromEntries(state.nodes.map(n => [n.id, n]));
-    const chain = [];
-    let cur = byId[id];
-    while (cur) {
-      chain.unshift(cur.id);
-      cur = byId[cur.parentId];
-    }
-    return chain;
-  }
-
-  function bindHotkeys() {
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        state.previewNodeId = null;
-        renderPanel();
-        clearHighlights();
-        if (state.activeNodeId) applyFocusPath(state.activeNodeId);
-        status('Preview cleared');
+      if (parentId && treeNodes.has(parentId)) {
+        const parent = treeNodes.get(parentId);
+        if (!parent.children.includes(nodeId)) parent.children.push(nodeId);
       }
+
+      sendToPanel({
+        type:      'BUILD_PROGRESS',
+        nodeCount: treeNodes.size,
+        turnIdx,
+        b,
+        branchTotal,
+        turnCount: turns.length,
+      });
+
+      await dfsCollect(nodeId, turnIdx + 1, treeNodes);
+
+      if (cancelled) throw new Error('cancelled');
+
+      // Restore to b after recursion
+      const afterTurns = readRawTurns();
+      const afterTurn  = afterTurns[turnIdx];
+      if (afterTurn && afterTurn.branchIndex !== b) {
+        await navigateTurnToBranch(afterTurn, b);
+        await sleep(NAV_WAIT_MS);
+      }
+    }
+
+    if (cancelled) throw new Error('cancelled');
+
+    // Backtrack to original
+    const finalTurns = readRawTurns();
+    const finalTurn  = finalTurns[turnIdx];
+    if (finalTurn && finalTurn.branchIndex !== originalBranch) {
+      await navigateTurnToBranch(finalTurn, originalBranch);
+      await sleep(NAV_WAIT_MS);
+    }
+  }
+
+  // ── Nav helper — with timeout + retry ────────────────────────────────────────
+  // Returns true on success, false if stuck after retries.
+  async function navigateTurnToBranch(turn, target) {
+    for (let attempt = 0; attempt <= NAV_RETRIES; attempt++) {
+      const result = await tryNavToTarget(turn, target);
+      if (result) return true;
+
+      if (cancelled) return false;
+
+      // Retry: re-read the turn and try once more
+      const fresh = readRawTurns()[turn.turnIndex];
+      if (!fresh) return false;
+      if (fresh.branchIndex === target) return true;
+
+      // Give DOM a bit more time before retry
+      await sleep(NAV_WAIT_MS);
+    }
+    return false;
+  }
+
+  // Single attempt to nav turn to target — times out after NAV_TIMEOUT ms
+  async function tryNavToTarget(turn, target) {
+    const deadline = Date.now() + NAV_TIMEOUT;
+
+    for (let step = 0; step < 30; step++) {
+      if (cancelled) return false;
+      if (Date.now() > deadline) return false;
+
+      const fresh = readRawTurns()[turn.turnIndex];
+      if (!fresh) return false;
+      if (fresh.branchIndex === target) return true;
+
+      if (target > fresh.branchIndex) { fresh.nextBtn?.click(); }
+      else                            { fresh.prevBtn?.click(); }
+
+      await sleep(NAV_WAIT_MS);
+    }
+
+    // One last check
+    const final = readRawTurns()[turn.turnIndex];
+    return final?.branchIndex === target;
+  }
+
+  // ── DOM reading ──────────────────────────────────────────────────────────────
+  function readRawTurns() {
+    if (PLATFORM === 'chatgpt') return readChatGPTTurns();
+    if (PLATFORM === 'claude')  return readClaudeTurns();
+    return readGenericTurns();
+  }
+
+  function readChatGPTTurns() {
+    const turns = [...document.querySelectorAll('article[data-testid^="conversation-turn-"]')];
+    return turns.map((turn, idx) => {
+      const role   = turn.getAttribute('data-turn') === 'user' ? 'user' : 'assistant';
+      const msgDiv = turn.querySelector('[data-message-id]');
+      const msgId  = msgDiv?.getAttribute('data-message-id') || turn.getAttribute('data-turn-id') || null;
+      const nav    = findBranchNav(turn);
+      return {
+        turnIndex:   idx,
+        domId:       msgId,
+        role,
+        text:        extractText(msgDiv || turn),
+        branchIndex: nav?.current ?? 1,
+        branchTotal: nav?.total   ?? 1,
+        prevBtn:     nav?.prevBtn ?? null,
+        nextBtn:     nav?.nextBtn ?? null,
+        article:     turn,
+      };
     });
   }
 
-  function hash(s) {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) {
-      h = ((h << 5) - h) + s.charCodeAt(i);
-      h |= 0;
+  // ── Claude turn reading ───────────────────────────────────────────────────────
+  // Claude's branch nav lives inside each human turn (user message), allowing
+  // users to switch between edited messages. The assistant response following
+  // each branch is considered a child of that branch.
+  function readClaudeTurns() {
+    // Strategy 1: prefer data-testid human/assistant turns
+    let turnEls = [
+      ...document.querySelectorAll('[data-testid="human-turn"],[data-testid="assistant-turn"]'),
+    ];
+
+    // Strategy 2: fall back to conversation-turn wrappers
+    if (!turnEls.length) {
+      turnEls = [...document.querySelectorAll('[data-testid^="conversation-turn-"]')];
     }
-    return Math.abs(h).toString(36);
+
+    // Strategy 3: look for message-container divs used in some Claude layouts
+    if (!turnEls.length) {
+      turnEls = [...document.querySelectorAll(
+        '[class*="human-turn"],[class*="assistant-turn"],[class*="HumanTurn"],[class*="AssistantTurn"]'
+      )];
+    }
+
+    return turnEls.map((turn, idx) => {
+      const testId = turn.getAttribute('data-testid') || '';
+      const cls    = turn.className || '';
+      const isUser =
+        testId.includes('human') ||
+        cls.toLowerCase().includes('human') ||
+        cls.toLowerCase().includes('user');
+      const role = isUser ? 'user' : 'assistant';
+
+      const nav = findBranchNav(turn);
+
+      return {
+        turnIndex:   idx,
+        domId:       turn.getAttribute('data-message-id') || null,
+        role,
+        text:        extractText(turn),
+        branchIndex: nav?.current ?? 1,
+        branchTotal: nav?.total   ?? 1,
+        prevBtn:     nav?.prevBtn ?? null,
+        nextBtn:     nav?.nextBtn ?? null,
+        article:     turn,
+      };
+    });
   }
 
-  function short(id) {
-    return id.slice(0, 10);
+  function readGenericTurns() {
+    const sels = ['[data-message-id]','article','[data-testid*="conversation"]','[class*="message"]'];
+    let best = [];
+    for (const s of sels) {
+      const found = [...document.querySelectorAll(s)].filter(e => (e.innerText||'').trim().length >= 8);
+      if (found.length > best.length) best = found;
+    }
+    return best.map((el, idx) => ({
+      turnIndex: idx, domId: null,
+      role: idx % 2 === 0 ? 'user' : 'assistant',
+      text: extractText(el),
+      branchIndex: 1, branchTotal: 1,
+      prevBtn: null, nextBtn: null, article: el,
+    }));
   }
 
-  function escapeHtml(str) {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+  // ── findBranchNav ─────────────────────────────────────────────────────────────
+  // Locates the X/Y branch counter and associated prev/next buttons.
+  // Works for both ChatGPT (aria-label Chinese/English) and Claude.
+  function findBranchNav(container) {
+    const candidates = [];
+
+    // Walk all descendants looking for "X / Y" text patterns
+    for (const el of container.querySelectorAll('*')) {
+      if (el.children.length > 2) continue;
+      const m = el.textContent?.trim().match(/^(\d+)\s*\/\s*(\d+)$/);
+      if (!m) continue;
+      const current = +m[1], total = +m[2];
+      if (total < 2) continue;
+      candidates.push({ el, current, total });
+    }
+
+    if (!candidates.length) return null;
+
+    for (const { el, current, total } of candidates) {
+      // Walk up ancestors to find the button group
+      let node = el.parentElement;
+      for (let lvl = 0; lvl < 6 && node; lvl++) {
+        const btns = [...node.querySelectorAll('button')];
+        if (!btns.length) { node = node.parentElement; continue; }
+
+        // ChatGPT: aria-label based (Chinese or English)
+        const prevBtn = btns.find(b => {
+          const l = (b.getAttribute('aria-label') || '').toLowerCase();
+          return l.includes('上一') || l.includes('prev') || l.includes('previous') || l.includes('earlier');
+        });
+        const nextBtn = btns.find(b => {
+          const l = (b.getAttribute('aria-label') || '').toLowerCase();
+          return l.includes('下一') || l.includes('next') || l.includes('later');
+        });
+        if (prevBtn && nextBtn) return { current, total, prevBtn, nextBtn };
+
+        // Claude: no aria-labels — the two buttons immediately surrounding the
+        // counter element are prev (left) and next (right).
+        // Find buttons that are siblings/neighbors of the counter's parent.
+        if (btns.length >= 2) {
+          const counterRect = el.getBoundingClientRect();
+          const sorted = btns
+            .map(b => ({ b, r: b.getBoundingClientRect() }))
+            .filter(({ r }) => r.width > 0)  // visible only
+            .sort((a, b2) => a.r.left - b2.r.left);
+
+          // Find the two closest buttons to the counter by X position
+          const withDist = sorted.map(({ b, r }) => ({
+            b,
+            dist: Math.abs((r.left + r.right) / 2 - (counterRect.left + counterRect.right) / 2),
+          })).sort((a, b2) => a.dist - b2.dist);
+
+          if (withDist.length >= 2) {
+            const [closestA, closestB] = withDist;
+            const rA = closestA.b.getBoundingClientRect();
+            const rB = closestB.b.getBoundingClientRect();
+            const leftBtn  = rA.left < rB.left ? closestA.b : closestB.b;
+            const rightBtn = rA.left < rB.left ? closestB.b : closestA.b;
+            return { current, total, prevBtn: leftBtn, nextBtn: rightBtn };
+          }
+        }
+
+        node = node.parentElement;
+      }
+    }
+    return null;
   }
+
+  function readCurrentPath() {
+    return readRawTurns().map(t => ({
+      id:          makeNodeId(t.turnIndex, t.branchIndex, t.domId),
+      turnIndex:   t.turnIndex,
+      branchIndex: t.branchIndex,
+    }));
+  }
+
+  function serializeTurns(turns) {
+    return turns.map(t => ({
+      turnIndex: t.turnIndex, role: t.role, text: t.text,
+      branchIndex: t.branchIndex, branchTotal: t.branchTotal,
+    }));
+  }
+
+  function makeNodeId(turnIndex, branchIndex, domId) {
+    if (domId && !domId.startsWith('g_') && !domId.startsWith('claude_')) return domId;
+    return `t${turnIndex}_b${branchIndex}`;
+  }
+
+  // ── Text extraction ───────────────────────────────────────────────────────────
+  function extractText(el) {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('button,svg,nav,[role="toolbar"],[role="group"]').forEach(e => e.remove());
+    return (clone.innerText || clone.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 220);
+  }
+
+  // ── Storage persistence ───────────────────────────────────────────────────────
+  function saveToStorage(treeNodes, activePath) {
+    const key = storageKey();
+    chrome.storage.local.set({
+      [key]: {
+        nodes:      [...treeNodes.values()],
+        activePath,
+        savedAt:    Date.now(),
+        url:        location.href,
+      },
+    }).catch(() => {});
+  }
+
+  function storageKey() {
+    // Key by conversation URL (path only, strip query params)
+    try {
+      const u = new URL(location.href);
+      return 'cbv_tree_' + (u.pathname + u.hash).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 120);
+    } catch { return 'cbv_tree_default'; }
+  }
+
+  // ── MutationObserver ──────────────────────────────────────────────────────────
+  function startObserver() {
+    observer?.disconnect();
+    observer = new MutationObserver(() => {
+      if (building) return;
+      clearTimeout(mutTimer);
+      mutTimer = setTimeout(() => {
+        sendToPanel({ type: 'ACTIVE_PATH', activePath: readCurrentPath() });
+      }, DEBOUNCE_MS);
+    });
+    const target = document.querySelector('main') || document.body;
+    observer.observe(target, { childList: true, subtree: true });
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 })();

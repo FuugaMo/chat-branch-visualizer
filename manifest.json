@@ -1,14 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Chat Branch Visualizer MVP",
-  "version": "0.1.0",
-  "description": "Visualize and quickly preview conversation branches in ChatGPT/Claude.",
-  "permissions": ["storage"],
+  "name": "Chat Branch Visualizer",
+  "version": "0.2.0",
+  "description": "Visualize conversation branches in ChatGPT/Claude as a native sidebar.",
+  "permissions": ["storage", "sidePanel", "tabs"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://claude.ai/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open Branch Visualizer"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -17,8 +26,8 @@
         "https://claude.ai/*"
       ],
       "js": ["content.js"],
-      "css": ["styles.css"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "icons": {}
 }

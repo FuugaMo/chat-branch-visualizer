@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Run this in browser to generate PNG icons, then save them to icons/
+[16,48,128].forEach(size => {
+  const c = document.getElementById('c');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  // Background
+  ctx.fillStyle = '#161b22';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, size * 0.15);
+  ctx.fill();
+  // Draw branch icon (⎇ style)
+  ctx.strokeStyle = '#3fb950';
+  ctx.lineWidth = Math.max(1.5, size / 12);
+  ctx.lineCap = 'round';
+  const m = size * 0.18;
+  const cx = size / 2;
+  // Trunk
+  ctx.beginPath();
+  ctx.moveTo(cx, m);
+  ctx.lineTo(cx, size - m);
+  ctx.stroke();
+  // Left branch
+  ctx.beginPath();
+  ctx.moveTo(cx, size * 0.4);
+  ctx.lineTo(m, size * 0.65);
+  ctx.stroke();
+  // Right branch
+  ctx.beginPath();
+  ctx.moveTo(cx, size * 0.4);
+  ctx.lineTo(size - m, size * 0.65);
+  ctx.stroke();
+  // Dots at ends
+  ctx.fillStyle = '#58a6ff';
+  [[cx, m],[m, size*0.65],[size-m, size*0.65],[cx, size-m]].forEach(([x,y]) => {
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1.5, size/14), 0, Math.PI*2);
+    ctx.fill();
+  });
+  const link = document.createElement('a');
+  link.download = `icon${size}.png`;
+  link.href = c.toDataURL();
+  link.textContent = `Download icon${size}.png`;
+  link.style.display = 'block';
+  document.body.appendChild(link);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,378 @@
+/* ============================================================
+   Chat Branch Visualizer — Notion-style UI
+   Full light/dark auto-adaptation via prefers-color-scheme
+   ============================================================ */
+
+/* ── Design tokens ─────────────────────────────────────────── */
+:root {
+  /* Surface */
+  --bg-app:       #ffffff;
+  --bg-header:    #ffffff;
+  --bg-canvas:    #f7f6f3;
+  --bg-btn:       #f1f0ee;
+  --bg-btn-hover: #e9e8e4;
+  --bg-tag-u:     #e8f0fe;
+  --bg-tag-a:     #e6f4ea;
+  --bg-badge:     #fff3e0;
+
+  /* Border */
+  --bd:           #e9e8e4;
+  --bd-strong:    #d3d1cb;
+
+  /* Text */
+  --tx-primary:   #1a1a1a;
+  --tx-secondary: #787774;
+  --tx-muted:     #b5b2aa;
+  --tx-tag-u:     #1967d2;
+  --tx-tag-a:     #1e7e34;
+  --tx-badge:     #bf6c00;
+
+  /* Accent */
+  --accent:       #2383e2;       /* Notion blue */
+  --accent-green: #0f7b6c;
+  --accent-bg:    #e8f3fd;
+
+  /* Node SVG */
+  --node-fill:         #ffffff;
+  --node-fill-u:       #f0f5ff;
+  --node-fill-a:       #f0faf5;
+  --node-fill-active-u:#dbeafe;
+  --node-fill-active-a:#d1fae5;
+  --node-stroke:       #e2e0dc;
+  --node-stroke-u:     #93c5fd;
+  --node-stroke-a:     #6ee7b7;
+  --node-stroke-active-u: #2383e2;
+  --node-stroke-active-a: #0f7b6c;
+  --node-tx:           #1a1a1a;
+  --node-tx-muted:     #9b9793;
+  --edge-color:        #d1cec9;
+  --edge-active-u:     #2383e2;
+  --edge-active-a:     #0f7b6c;
+
+  /* Shadow */
+  --shadow-node: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
+  --shadow-node-active: 0 2px 8px rgba(35,131,226,.18);
+
+  /* Progress */
+  --progress-track: #e9e8e4;
+  --progress-fill:  linear-gradient(90deg, #2383e2, #0f7b6c);
+
+  /* Typography */
+  --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Radius */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 10px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-app:       #191919;
+    --bg-header:    #1f1f1f;
+    --bg-canvas:    #141414;
+    --bg-btn:       #2a2a2a;
+    --bg-btn-hover: #363636;
+    --bg-tag-u:     #1a2744;
+    --bg-tag-a:     #142a1e;
+    --bg-badge:     #2d1e00;
+
+    --bd:           #2e2e2e;
+    --bd-strong:    #404040;
+
+    --tx-primary:   #e8e8e6;
+    --tx-secondary: #8b8b88;
+    --tx-muted:     #555553;
+    --tx-tag-u:     #7eb3f8;
+    --tx-tag-a:     #6bcf87;
+    --tx-badge:     #f0a030;
+
+    --accent:       #4a9eed;
+    --accent-green: #29a37a;
+    --accent-bg:    #1a2e44;
+
+    --node-fill:         #252525;
+    --node-fill-u:       #1a2440;
+    --node-fill-a:       #142818;
+    --node-fill-active-u:#1c3060;
+    --node-fill-active-a:#153824;
+    --node-stroke:       #383838;
+    --node-stroke-u:     #4a7fc1;
+    --node-stroke-a:     #3a9e6a;
+    --node-stroke-active-u: #4a9eed;
+    --node-stroke-active-a: #29a37a;
+    --node-tx:           #e8e8e6;
+    --node-tx-muted:     #6b6b68;
+    --edge-color:        #383838;
+    --edge-active-u:     #4a9eed;
+    --edge-active-a:     #29a37a;
+
+    --shadow-node: 0 1px 4px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.04);
+    --shadow-node-active: 0 2px 10px rgba(74,158,237,.22);
+
+    --progress-track: #2e2e2e;
+    --progress-fill:  linear-gradient(90deg, #4a9eed, #29a37a);
+  }
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0; padding: 0;
+}
+
+/* ── App shell ─────────────────────────────────────────────── */
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--tx-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+#cbv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 44px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--bd);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.cbv-logo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cbv-logo-icon {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+  opacity: .85;
+}
+
+.cbv-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx-primary);
+  letter-spacing: -.01em;
+  white-space: nowrap;
+}
+
+.cbv-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* ── Icon buttons ──────────────────────────────────────────── */
+.cbv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--tx-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s var(--ease-out), color .12s var(--ease-out);
+  outline: none;
+}
+.cbv-btn:hover   { background: var(--bg-btn-hover); color: var(--tx-primary); }
+.cbv-btn:active  { background: var(--bd-strong); }
+.cbv-btn:disabled { opacity: .38; cursor: not-allowed; }
+.cbv-btn:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+
+.cbv-btn svg { flex-shrink: 0; }
+
+/* Build button — filled accent */
+#btn-build {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+#btn-build:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Cancel button — danger style */
+.cbv-btn-danger {
+  color: var(--tx-error, #d14);
+}
+.cbv-btn-danger:hover {
+  background: rgba(204, 17, 34, 0.10);
+  color: var(--tx-error, #d14);
+}
+
+/* Divider between button groups */
+.cbv-btn-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--bd);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* ── Progress bar ──────────────────────────────────────────── */
+#cbv-progress-wrap {
+  height: 2px;
+  background: var(--progress-track);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#cbv-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--progress-fill);
+  transition: width .18s ease;
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Status bar ────────────────────────────────────────────── */
+#cbv-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 28px;
+  font-size: 11px;
+  color: var(--tx-muted);
+  border-bottom: 1px solid var(--bd);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: .01em;
+}
+
+.cbv-status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--tx-muted);
+  flex-shrink: 0;
+  transition: background .3s;
+}
+.cbv-status-dot.ok      { background: var(--accent-green); }
+.cbv-status-dot.working { background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite; }
+.cbv-status-dot.error   { background: #e03e3e; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .35; }
+}
+
+/* ── Tree canvas ───────────────────────────────────────────── */
+#cbv-tree {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-canvas);
+  cursor: grab;
+  /* Subtle grid — adapts to theme via opacity */
+  background-image:
+    linear-gradient(var(--bd) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bd) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -0.5px -0.5px;
+}
+#cbv-tree:active { cursor: grabbing; }
+
+/* ── Canvas inner ──────────────────────────────────────────── */
+#cbv-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  /* transform set via JS — no transition here (applied manually for fit) */
+}
+
+/* ── Minimap ───────────────────────────────────────────────── */
+#cbv-minimap {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 120px;
+  height: 80px;
+  border-radius: 8px;
+  border: 1px solid var(--bd-strong);
+  background: var(--bg-app);
+  opacity: 0.88;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+
+/* ── Empty state ───────────────────────────────────────────── */
+.cbv-empty {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cbv-empty-icon {
+  width: 40px; height: 40px;
+  opacity: .2;
+}
+
+.cbv-empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx-secondary);
+}
+
+.cbv-empty-sub {
+  font-size: 12px;
+  color: var(--tx-muted);
+  line-height: 1.6;
+}
+
+/* ── SVG node styles (applied via class + CSS vars) ──────────── */
+/* Node groups — hover filter handled here, not in JS */
+.node-g { cursor: pointer; }
+
+.node-box {
+  /* filter transition for hover */
+  transition: filter .12s var(--ease-out);
+}
+.node-g:hover .node-box {
+  filter: brightness(0.96) saturate(1.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .node-g:hover .node-box { filter: brightness(1.15) saturate(1.1); }
+}
