@@ -388,16 +388,36 @@ function renderTree() {
 function initInteraction() {
   const tree = document.getElementById('cbv-tree');
 
-  // Fix 3: proportional wheel delta (Figma-style)
+  // ── Wheel / trackpad ──────────────────────────────────────────────────────
+  // Chrome sends wheel events for both trackpad scroll and pinch-to-zoom.
+  // Key distinction: pinch sets e.ctrlKey = true; two-finger scroll does not.
+  //
+  // Desired behaviour (matching Figma / Miro):
+  //   • Two-finger scroll (ctrlKey=false) → pan (deltaX = horizontal, deltaY = vertical)
+  //   • Pinch (ctrlKey=true)              → zoom centred on cursor
+  //   • Ctrl + scroll wheel               → zoom (same as pinch)
   tree.addEventListener('wheel', e => {
     e.preventDefault();
-    const r      = tree.getBoundingClientRect();
-    const delta  = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY; // line → px
-    const factor = Math.pow(0.999, delta);
-    zoomAt(e.clientX - r.left, e.clientY - r.top, factor);
+    const r = tree.getBoundingClientRect();
+
+    if (e.ctrlKey) {
+      // Pinch-to-zoom or Ctrl+scroll → zoom
+      // deltaY is negative when spreading (zoom in), positive when pinching (zoom out)
+      const raw    = e.deltaMode === 1 ? e.deltaY * 20 : e.deltaY;
+      const factor = Math.pow(0.998, raw); // smaller base = gentler curve
+      zoomAt(e.clientX - r.left, e.clientY - r.top, factor);
+    } else {
+      // Two-finger scroll → pan
+      const dx = e.deltaMode === 1 ? e.deltaX * 20 : e.deltaX;
+      const dy = e.deltaMode === 1 ? e.deltaY * 20 : e.deltaY;
+      cam.x -= dx;
+      cam.y -= dy;
+      applyTransform();
+      renderMinimap();
+    }
   }, { passive: false });
 
-  // Mouse pan
+  // ── Mouse drag pan ────────────────────────────────────────────────────────
   tree.addEventListener('mousedown', e => {
     if (e.button !== 0 || e.target.closest('.node-g')) return;
     isPanning = true;
@@ -417,7 +437,9 @@ function initInteraction() {
     tree.style.cursor = 'grab';
   });
 
-  // Fix 1: touchstart must be { passive: false } to allow pinch prevention
+  // ── Touch (physical touchscreen, not trackpad) ────────────────────────────
+  // 1-finger → pan; 2-finger → pinch zoom.
+  // {passive:false} on touchstart/touchmove so we can call preventDefault.
   tree.addEventListener('touchstart', e => {
     if (e.touches.length === 1) {
       isPanning = true;
@@ -425,9 +447,9 @@ function initInteraction() {
     } else if (e.touches.length === 2) {
       isPanning = false;
       lastPinch = pinchDist(e.touches);
-      e.preventDefault(); // block browser native pinch-zoom at touchstart
+      e.preventDefault();
     }
-  }, { passive: false }); // Fix 1: must be false
+  }, { passive: false });
 
   tree.addEventListener('touchmove', e => {
     if (e.touches.length === 1 && isPanning) {
@@ -435,8 +457,8 @@ function initInteraction() {
       cam.y = panStart.cy + (e.touches[0].clientY - panStart.y);
       applyTransform();
       renderMinimap();
-    } else if (e.touches.length === 2 && lastPinch) {
-      e.preventDefault(); // Fix 1: only block scroll during actual pinch
+    } else if (e.touches.length === 2 && lastPinch != null) {
+      e.preventDefault();
       const d  = pinchDist(e.touches);
       const r  = tree.getBoundingClientRect();
       const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
@@ -445,7 +467,7 @@ function initInteraction() {
       lastPinch = d;
       renderMinimap();
     }
-  }, { passive: false }); // Fix 1: must be false for preventDefault to work
+  }, { passive: false });
 
   tree.addEventListener('touchend', () => {
     isPanning = false;
@@ -453,6 +475,9 @@ function initInteraction() {
   }, { passive: true });
 
   tree.style.cursor = 'grab';
+
+  // ── Minimap click → pan to that region ───────────────────────────────────
+  initMinimapClick();
 }
 
 function pinchDist(touches) {
@@ -601,6 +626,80 @@ function renderMinimap() {
   ctx.globalAlpha = 0.8;
   ctx.strokeRect(vx, vy, vw, vh);
   ctx.globalAlpha = 1;
+}
+
+// ── Minimap click / drag → pan main view ─────────────────────────────────────
+function initMinimapClick() {
+  const mini = document.getElementById('cbv-minimap');
+  if (!mini) return;
+
+  let minimapDragging = false;
+
+  function panFromMinimap(e) {
+    const svg  = document.querySelector('#cbv-canvas svg');
+    const tree = document.getElementById('cbv-tree');
+    if (!svg || !tree) return;
+
+    const mr   = mini.getBoundingClientRect();
+    const mw   = mini.width,  mh  = mini.height;
+    const svgW = +svg.getAttribute('width');
+    const svgH = +svg.getAttribute('height');
+    if (!svgW || !svgH) return;
+
+    // Fraction within minimap canvas
+    const fx = (e.clientX - mr.left)  / mr.width;
+    const fy = (e.clientY - mr.top)   / mr.height;
+
+    // Corresponding SVG-space coordinate
+    const svgX = fx * svgW;
+    const svgY = fy * svgH;
+
+    // Centre that SVG point in the viewport
+    const tw = tree.clientWidth, th = tree.clientHeight;
+    cam.x = tw / 2 - svgX * cam.scale;
+    cam.y = th / 2 - svgY * cam.scale;
+
+    applyTransform();
+    renderMinimap();
+  }
+
+  mini.style.cursor = 'crosshair';
+
+  mini.addEventListener('mousedown', e => {
+    minimapDragging = true;
+    panFromMinimap(e);
+    e.stopPropagation();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!minimapDragging) return;
+    panFromMinimap(e);
+  });
+
+  window.addEventListener('mouseup', () => {
+    minimapDragging = false;
+  });
+
+  // Touch support for minimap
+  mini.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      minimapDragging = true;
+      panFromMinimap(e.touches[0]);
+    }
+    e.stopPropagation();
+    e.preventDefault();
+  }, { passive: false });
+
+  mini.addEventListener('touchmove', e => {
+    if (minimapDragging && e.touches.length === 1) {
+      panFromMinimap(e.touches[0]);
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  mini.addEventListener('touchend', () => {
+    minimapDragging = false;
+  }, { passive: true });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
