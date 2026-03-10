@@ -96,6 +96,7 @@ let layoutMap = new Map();
   document.getElementById('btn-build').addEventListener('click', maybeStartBuild);
   document.getElementById('btn-cancel').addEventListener('click', () => { sendToContent({ type: 'CANCEL' }); });
   document.getElementById('btn-fit').addEventListener('click', fitView);
+  document.getElementById('btn-locate-visible').addEventListener('click', panToVisibleRange);
   document.getElementById('btn-expand-toggle').addEventListener('click', toggleExpandCollapseAll);
   document.getElementById('btn-build-cancel').addEventListener('click', closeBuildModal);
   document.getElementById('btn-build-confirm').addEventListener('click', confirmBuild);
@@ -927,12 +928,12 @@ function renderTree() {
     const badgeKind = isCluster ? 'cluster' : isUser ? 'user' : assistantBrand();
     const nx = info.x - nw / 2;
     const ny = info.y;
-    const clusterActiveStroke = cssVar('--tx-badge');
+    const clusterActiveStroke = cssVar('--bd-strong') || C.nodeStroke;
     const accentColor = isCluster
       ? (isActive ? clusterActiveStroke : C.nodeStroke)
       : (isUser ? C.edgeActiveU : C.edgeActiveA);
     const fill = isCluster
-      ? cssVar('--bg-badge')
+      ? cssVar('--bg-btn')
       : isActive ? (isUser ? C.nodeFillActiveU : C.nodeFillActiveA)
       : (isUser ? C.nodeFillU : C.nodeFillA);
     const stroke = isCluster
@@ -1513,6 +1514,40 @@ function panToActiveLeaf() {
     renderMinimap();
     setTimeout(() => { canvas.style.transition = ''; }, 420);
   }
+}
+
+function panToVisibleRange() {
+  const tree = document.getElementById('cbv-tree');
+  const canvas = document.getElementById('cbv-canvas');
+  if (!tree || !canvas) return;
+
+  const visibleInfos = [];
+  renderedNodes.forEach(node => {
+    if (!isNodeVisible(node)) return;
+    const info = layoutMap.get(node.id);
+    if (info) visibleInfos.push({ node, info });
+  });
+
+  if (!visibleInfos.length) {
+    panToActiveLeaf();
+    return;
+  }
+
+  const halfW = NW() / 2;
+  const halfH = NH() / 2;
+  const minX = Math.min(...visibleInfos.map(({ info }) => info.x - halfW));
+  const maxX = Math.max(...visibleInfos.map(({ info }) => info.x + halfW));
+  const minY = Math.min(...visibleInfos.map(({ info }) => info.y));
+  const maxY = Math.max(...visibleInfos.map(({ info }) => info.y + halfH * 2));
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  canvas.style.transition = 'transform 0.34s cubic-bezier(0.4,0,0.2,1)';
+  cam.x = tree.clientWidth / 2 - centerX * cam.scale;
+  cam.y = tree.clientHeight / 2 - centerY * cam.scale;
+  applyTransform();
+  renderMinimap();
+  setTimeout(() => { canvas.style.transition = ''; }, 360);
 }
 
 function renderMinimap() {
