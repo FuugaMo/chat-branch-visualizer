@@ -9,6 +9,19 @@
 <body>
 <div id="app">
 
+  <!-- ── Diagnostics Consent Banner ────────────────────────────── -->
+  <div id="cbv-consent-banner" class="cbv-consent-banner" hidden>
+    <div class="cbv-consent-body">
+      <p class="cbv-consent-title">Help improve compatibility</p>
+      <p class="cbv-consent-text">When the extension can't read a conversation, send anonymous diagnostic info (DOM structure, no chat content) to help fix bugs faster. You can change this anytime.</p>
+      <a class="cbv-consent-link" href="https://chat-branch-visualizer.vercel.app/privacy" target="_blank" rel="noopener">Privacy policy ↗</a>
+    </div>
+    <div class="cbv-consent-actions">
+      <button id="btn-consent-deny"  class="cbv-btn cbv-consent-btn-deny"  type="button">No thanks</button>
+      <button id="btn-consent-allow" class="cbv-btn cbv-btn-primary cbv-consent-btn-allow" type="button">Allow</button>
+    </div>
+  </div>
+
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header id="cbv-header">
     <span id="cbv-tree-summary" class="cbv-tree-summary" hidden></span>

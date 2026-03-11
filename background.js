@@ -121,9 +121,17 @@ function sanitizeDiagnostics(diagnostics) {
   };
 }
 
-function shouldAutoSendDiagnostics(diagnostics) {
+async function shouldAutoSendDiagnostics(diagnostics) {
   const config = getReportingConfig();
-  if (!config.enabled || !config.autoSend || !config.endpoint) return false;
+  if (!config.enabled || !config.endpoint) return false;
+  // Respect user consent stored by the side panel
+  try {
+    const result = await chrome.storage.local.get('cbv_consent');
+    const consent = result['cbv_consent'];
+    if (!consent?.decided || !consent?.autoSend) return false;
+  } catch (_) {
+    return false;
+  }
   const platform = diagnostics?.platform || diagnostics?.probe?.platform;
   if (platform !== 'chatgpt' && platform !== 'claude') return false;
   const reason = diagnostics?.reason || '';
@@ -243,13 +251,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
   }
 
-  if (msg?.type === 'PROBE_RESULT' && shouldAutoSendDiagnostics(msg.diagnostics)) {
-    postReport({
-      type: 'auto_probe',
-      diagnostics: msg.diagnostics,
-      sender,
-    }).catch(error => {
-      console.warn('CBV auto-report failed:', error);
+  if (msg?.type === 'PROBE_RESULT') {
+    shouldAutoSendDiagnostics(msg.diagnostics).then(should => {
+      if (!should) return;
+      postReport({
+        type: 'auto_probe',
+        diagnostics: msg.diagnostics,
+        sender,
+      }).catch(error => {
+        console.warn('CBV auto-report failed:', error);
+      });
     });
   }
 

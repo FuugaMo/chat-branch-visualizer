@@ -5,7 +5,7 @@
     enabled: true,
     endpoint: 'https://chat-branch-visualizer.vercel.app/api/reports',
     publicKey: 'cbv-report-v1',
-    autoSend: true,
+    autoSend: false,
     manualReports: false,
     requestTimeoutMs: 8000,
     dedupeWindowMs: 30 * 60 * 1000,

@@ -109,6 +109,8 @@ let layoutMap = new Map();   // nodeId → { x, y, w }
   document.getElementById('cbv-zoom-slider').addEventListener('input', onZoomSliderInput);
   document.getElementById('btn-copy-diagnostics').addEventListener('click', copyDiagnostics);
   document.getElementById('btn-report-breakage').addEventListener('click', reportBreakage);
+  document.getElementById('btn-consent-allow').addEventListener('click', () => saveConsent(true));
+  document.getElementById('btn-consent-deny').addEventListener('click',  () => saveConsent(false));
   updateExpandToggleButton();
   updateTreeCompletenessBadge();
   updateDiagnosticsActions();
@@ -120,8 +122,29 @@ let layoutMap = new Map();   // nodeId → { x, y, w }
   chrome.tabs.onActivated.addListener(handleActiveTabChanged);
   chrome.tabs.onUpdated.addListener(handleTabUpdated);
   await bindToActiveTab({ reset: false, restore: true });
+  await initConsentBanner();
 
 })();
+
+// ── Diagnostics consent ───────────────────────────────────────────────────────
+const CBV_CONSENT_KEY = 'cbv_consent';
+
+async function initConsentBanner() {
+  try {
+    const result = await chrome.storage.local.get(CBV_CONSENT_KEY);
+    const consent = result[CBV_CONSENT_KEY];
+    if (!consent?.decided) {
+      document.getElementById('cbv-consent-banner').hidden = false;
+    }
+  } catch (_) {}
+}
+
+async function saveConsent(allow) {
+  document.getElementById('cbv-consent-banner').hidden = true;
+  try {
+    await chrome.storage.local.set({ [CBV_CONSENT_KEY]: { decided: true, autoSend: allow } });
+  } catch (_) {}
+}
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
 function sendToContent(msg) {

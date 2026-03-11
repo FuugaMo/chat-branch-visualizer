@@ -8,7 +8,7 @@
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://claude.ai/*",
-    "https://*.vercel.app/*"
+    "https://chat-branch-visualizer.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"

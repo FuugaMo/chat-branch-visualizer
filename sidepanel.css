@@ -1003,3 +1003,61 @@ html, body {
   background: var(--accent);
   color: #fff;
 }
+
+/* ── Diagnostics consent banner ────────────────────────────────── */
+.cbv-consent-banner {
+  position: relative;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--bd);
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: cbv-consent-in 220ms var(--ease-out) both;
+}
+.cbv-consent-banner[hidden] { display: none; }
+
+@keyframes cbv-consent-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cbv-consent-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cbv-consent-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx-primary);
+}
+
+.cbv-consent-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--tx-secondary);
+}
+
+.cbv-consent-link {
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  margin-top: 2px;
+  align-self: flex-start;
+}
+.cbv-consent-link:hover { text-decoration: underline; }
+
+.cbv-consent-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cbv-consent-btn-deny,
+.cbv-consent-btn-allow {
+  font-size: 12px;
+  padding: 5px 14px;
+  height: auto;
+}

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Chat Branch Visualizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3e;
+      --text: #e2e4ef;
+      --muted: #8b8fa8;
+      --accent: #6c8ef7;
+      --accent-dim: rgba(108, 142, 247, 0.12);
+      --green: #4caf8a;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 48px 24px 80px;
+    }
+
+    .page {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(108, 142, 247, 0.25);
+      border-radius: 99px;
+      padding: 4px 12px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -.5px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      margin-bottom: 40px;
+    }
+
+    .updated {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .section {
+      margin-top: 40px;
+    }
+
+    h2 {
+      font-size: 17px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    p {
+      font-size: 15px;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    li {
+      font-size: 15px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .check-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .check-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .check-list li::before {
+      content: "✓";
+      color: var(--green);
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .cross-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .cross-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .cross-list li::before {
+      content: "✗";
+      color: #e05c5c;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    code {
+      font-family: "SF Mono", Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: #c8d0f0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 40px 0;
+    }
+
+    .contact-card {
+      background: var(--accent-dim);
+      border: 1px solid rgba(108, 142, 247, 0.25);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="badge">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Privacy Policy
+  </div>
+
+  <h1>Chat Branch Visualizer</h1>
+  <p class="subtitle">
+    How we handle data when the extension encounters a problem.
+    <br><span class="updated">Last updated: March 11, 2026</span>
+  </p>
+
+  <!-- TL;DR -->
+  <div class="card">
+    <div class="card-title">TL;DR</div>
+    <ul class="check-list">
+      <li>The extension reads your conversation page only to draw the branch tree — nothing is stored or sent during normal use.</li>
+      <li>When the extension fails to parse a page, a small diagnostic snapshot is sent automatically to help us fix the bug.</li>
+      <li>Diagnostic reports contain DOM structure signals and a partial URL — <strong>never</strong> your chat messages.</li>
+      <li>You can disable all reporting in the extension settings at any time.</li>
+    </ul>
+  </div>
+
+  <!-- 1. What we collect -->
+  <div class="section">
+    <h2>1. What we collect</h2>
+    <p>
+      Chat Branch Visualizer does <strong>not</strong> collect data during normal operation.
+      Data is only transmitted when the extension's parser fails to read the page (for example,
+      after a platform update changes the page structure). In that case, the following diagnostic
+      fields are sent:
+    </p>
+
+    <div class="card">
+      <div class="card-title">Fields included in a diagnostic report</div>
+      <ul>
+        <li><code>platform</code> — "chatgpt" or "claude"</li>
+        <li><code>extensionVersion</code> / <code>selectorVersion</code> — version strings</li>
+        <li><code>url</code> — the page URL, truncated to 240 characters</li>
+        <li><code>reason</code> — why parsing failed (e.g. <code>no_turns_detected</code>)</li>
+        <li><code>probe.hits</code> / <code>probe.broken</code> — which CSS selectors matched or failed</li>
+        <li><code>domSummary</code> — a compact list of tag names, test-IDs, and class names (no text content)</li>
+        <li><code>activePath</code> / <code>visiblePath</code> — up to 4 turn objects containing: turn index, branch index, role ("user"/"assistant"), and a 120-character text signature (first characters of a message, used only to identify which turn failed)</li>
+        <li><code>turnCount</code> — total number of turns detected</li>
+        <li><code>ts</code> — Unix timestamp of the report</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">What is never collected</div>
+      <ul class="cross-list">
+        <li>Full conversation content or chat history</li>
+        <li>Your name, email address, or account information</li>
+        <li>Authentication tokens or cookies</li>
+        <li>Browsing history outside of ChatGPT / Claude pages</li>
+        <li>Any data from pages other than <code>chatgpt.com</code> and <code>claude.ai</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2. How we use it -->
+  <div class="section">
+    <h2>2. How we use diagnostic data</h2>
+    <p>
+      Diagnostic reports are used exclusively to detect when a platform update has broken the
+      extension's DOM parser, and to create or update a GitHub issue so a fix can be released.
+      Reports are <strong>not</strong> used for advertising, profiling, or any commercial purpose.
+    </p>
+    <p>
+      To prevent duplicate noise, the same breakage signature is suppressed from being reported
+      more than once every 30 minutes from the same browser session.
+    </p>
+  </div>
+
+  <!-- 3. Data flow -->
+  <div class="section">
+    <h2>3. Where data goes</h2>
+    <p>
+      When a report is sent, it travels from your browser to our Vercel API endpoint
+      (<code>chat-branch-visualizer.vercel.app/api/reports</code>), which sanitizes and
+      forwards it as a <code>repository_dispatch</code> event to the extension's
+      <a href="https://github.com" target="_blank" rel="noopener">GitHub repository</a>.
+      A GitHub Actions workflow then creates or updates an issue with the aggregated signal.
+    </p>
+    <ul>
+      <li><strong>Vercel</strong> — serverless function host; request logs may be retained per Vercel's standard retention policy.</li>
+      <li><strong>GitHub</strong> — issue tracker; diagnostic summaries appear in issue bodies and are publicly visible.</li>
+    </ul>
+    <p>
+      No other third parties receive your data.
+    </p>
+  </div>
+
+  <!-- 4. Permissions -->
+  <div class="section">
+    <h2>4. Chrome permissions used</h2>
+    <div class="card">
+      <ul>
+        <li><code>sidePanel</code> — opens the branch visualizer in Chrome's native side panel.</li>
+        <li><code>tabs</code> — routes messages between the content script and the side panel for the active tab; no tab data is stored or transmitted.</li>
+        <li><code>storage</code> — saves your UI preferences (zoom level, "do not ask again" flag) locally in Chrome.</li>
+        <li><code>clipboardWrite</code> — lets you copy a diagnostic snapshot to clipboard when you click "Copy Diagnostics".</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 5. User control -->
+  <div class="section">
+    <h2>5. Your control</h2>
+    <p>
+      Automatic diagnostic reporting can be turned off at any time. Open the extension side panel,
+      click the <strong>⋯ More</strong> menu, and select <strong>Settings</strong>.
+      Setting <em>Send diagnostics automatically</em> to <strong>Off</strong> stops all outbound
+      network requests from the extension.
+    </p>
+    <p>
+      Because diagnostic reports contain no personally identifiable information and are processed
+      automatically without persistent user records, there is no individual data to retrieve or
+      delete. If you have concerns about a specific report, contact us (see below) with the
+      approximate timestamp and we will remove the corresponding GitHub issue content.
+    </p>
+  </div>
+
+  <!-- 6. Children -->
+  <div class="section">
+    <h2>6. Children's privacy</h2>
+    <p>
+      This extension is not directed at children under 13. We do not knowingly collect any
+      information from children.
+    </p>
+  </div>
+
+  <!-- 7. Changes -->
+  <div class="section">
+    <h2>7. Changes to this policy</h2>
+    <p>
+      If we make material changes to what data is collected or how it is used, we will update
+      the "Last updated" date above and increment the extension version. Continued use of the
+      extension after an update constitutes acceptance of the revised policy.
+    </p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Contact -->
+  <div class="contact-card">
+    <h2 style="border: none; padding: 0; margin-bottom: 8px;">Contact</h2>
+    <p style="margin: 0; color: var(--muted);">
+      Questions about this policy? Open an issue on the
+      <a href="https://github.com/fuugamo/chat-branch-visualizer-mvp" target="_blank" rel="noopener">GitHub repository</a>
+      or email <a href="mailto:lucidpht@gmail.com">lucidpht@gmail.com</a>.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
