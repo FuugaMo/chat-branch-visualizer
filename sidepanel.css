@@ -218,7 +218,7 @@ html, body {
 }
 
 .cbv-tree-state-building::before {
-  content: '…';
+  content: none;
 }
 
 .cbv-tree-state-empty::before {

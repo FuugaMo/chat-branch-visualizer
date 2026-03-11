@@ -273,7 +273,8 @@ function onContentMessage(msg) {
       const wasPartial = treeCompleteness === 'partial';
       msg.turns = sanitizeTurns(msg.turns);
       if (treeCompleteness !== 'full') {
-        replaceTreeWithTurns(msg.turns);
+        if (msg.turns.length) mergeTurnsIntoTree(msg.turns);
+        else replaceTreeWithTurns(msg.turns);
         setTreeCompleteness(msg.turns.length ? 'partial' : (treeLoadingMode === 'conversation' ? 'loading' : 'empty'));
       }
       setActivePathState(sanitizePathTurns(msg.turns.map(t => ({
@@ -373,7 +374,9 @@ function onContentMessage(msg) {
       break;
 
     case 'CONVERSATION_LOADING':
-      setTreeCompleteness('loading');
+      if (!treeNodes.size || treeCompleteness === 'loading' || treeCompleteness === 'empty') {
+        setTreeCompleteness('loading');
+      }
       showTreeLoading('Loading conversation…', `Waiting for ${assistantDisplayName()} to finish switching branches`, 'conversation');
       break;
 
@@ -384,7 +387,8 @@ function onContentMessage(msg) {
       msg.turns = sanitizeTurns(msg.turns);
       msg.activePath = sanitizePathTurns(msg.activePath);
       if (treeCompleteness !== 'full') {
-        replaceTreeWithTurns(msg.turns);
+        if (msg.turns.length) mergeTurnsIntoTree(msg.turns);
+        else replaceTreeWithTurns(msg.turns);
         setTreeCompleteness(msg.turns.length ? 'partial' : (treeLoadingMode === 'conversation' ? 'loading' : 'empty'));
       }
       setActivePathState(msg.activePath);
