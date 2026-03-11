@@ -1840,12 +1840,24 @@ function panToVisibleRange() {
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
 
-  canvas.style.transition = 'transform 0.34s cubic-bezier(0.4,0,0.2,1)';
-  cam.x = tree.clientWidth / 2 - centerX * cam.scale;
-  cam.y = tree.clientHeight / 2 - centerY * cam.scale;
+  const tw = tree.clientWidth;
+  const th = tree.clientHeight;
+  const contentW = maxX - minX || NW();
+  const contentH = maxY - minY || NH();
+  const targetScale = Math.min(
+    1.0,
+    (tw - PAD * 3) / contentW,
+    (th - PAD * 3) / contentH
+  ) * 0.92;
+  cam.scale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetScale));
+
+  canvas.style.transition = 'transform 0.38s cubic-bezier(0.4,0,0.2,1)';
+  cam.x = tw / 2 - centerX * cam.scale;
+  cam.y = th / 2 - centerY * cam.scale;
   applyTransform();
+  syncZoomSlider();
   renderMinimap();
-  setTimeout(() => { canvas.style.transition = ''; }, 360);
+  setTimeout(() => { canvas.style.transition = ''; }, 400);
 }
 
 // Fix 7: minimap
