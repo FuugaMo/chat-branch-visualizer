@@ -19,8 +19,20 @@ jobs:
             const payload = context.payload.client_payload || {};
             const report = payload.report || {};
             const diagnostics = report.diagnostics || {};
-            const digest = payload.digest || 'unknown';
-            const marker = `<!-- cbv-report-digest:${digest} -->`;
+            const exactDigest = payload.digest || 'unknown';
+            const aggregateDigest = require('crypto')
+              .createHash('sha256')
+              .update(JSON.stringify({
+                type: report.type || 'auto_probe',
+                platform: diagnostics.platform || 'unknown',
+                reason: diagnostics.reason || 'unknown',
+                broken: diagnostics.probe?.broken || [],
+                selectorVersion: diagnostics.selectorVersion || 'unknown',
+              }))
+              .digest('hex')
+              .slice(0, 16);
+            const exactMarker = `<!-- cbv-report-digest:${exactDigest} -->`;
+            const aggregateMarker = `<!-- cbv-aggregate-digest:${aggregateDigest} -->`;
             const labels = [
               'extension-report',
               report.type === 'user_report' ? 'user-report' : 'auto-report',
@@ -28,15 +40,22 @@ jobs:
             if ((diagnostics.probe?.broken || []).length) labels.push('selector-broken');
 
             const titlePrefix = report.type === 'user_report' ? '[USER]' : '[AUTO]';
-            const title = `${titlePrefix} ${diagnostics.platform || 'unknown'} ${diagnostics.reason || 'breakage'}`;
+            const title = [
+              titlePrefix,
+              diagnostics.platform || 'unknown',
+              diagnostics.reason || 'breakage',
+              (diagnostics.probe?.broken || []).join(', ') || 'no-broken-selectors',
+            ].join(' · ');
 
             const body = [
-              marker,
+              exactMarker,
+              aggregateMarker,
               '## Report Summary',
               '',
               `- Type: \`${report.type || 'auto_probe'}\``,
               `- Platform: \`${diagnostics.platform || 'unknown'}\``,
               `- Reason: \`${diagnostics.reason || 'unknown'}\``,
+              `- Selector version: \`${diagnostics.selectorVersion || 'unknown'}\``,
               `- URL: ${diagnostics.url || report.tabUrl || 'unknown'}`,
               `- Broken probes: \`${(diagnostics.probe?.broken || []).join(', ') || 'none'}\``,
               '',
@@ -55,17 +74,20 @@ jobs:
               per_page: 100,
             });
 
-            const existing = issues.find(issue => (issue.body || '').includes(marker));
+            const existing = issues.find(issue => (issue.body || '').includes(aggregateMarker));
             if (existing) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existing.number,
                 body: [
-                  'A matching report was received again.',
+                  'A matching aggregated report was received again.',
                   '',
+                  `- Aggregate digest: \`${aggregateDigest}\``,
+                  `- Exact digest: \`${exactDigest}\``,
                   `- Event: \`${context.payload.action || context.payload.repository_dispatch?.event_type || context.payload.client_payload?.report?.type || 'repository_dispatch'}\``,
                   `- Reported at: ${new Date().toISOString()}`,
+                  `- URL: ${diagnostics.url || report.tabUrl || 'unknown'}`,
                   '',
                   '```json',
                   JSON.stringify(report, null, 2),
