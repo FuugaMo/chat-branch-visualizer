@@ -1,110 +1,113 @@
-# chat-branch-visualizer-mvp
+# Chat Branch Visualizer
 
-Chrome extension for visualizing ChatGPT and Claude conversation branches in a native side panel, with diagnostics and automation hooks for DOM drift.
+**Visualize your ChatGPT and Claude conversation branches as an interactive tree — in Chrome's native side panel.**
 
-## Core features
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v0.2.0-blue?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/chat-branch-visualizer/mahknjdihdpeceompocgcclnmjikmncb)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- Shared tree renderer for ChatGPT and Claude
-- Platform-specific DOM parsers in `content.js`
-- Full-tree traversal with branch navigation
-- Partial/full snapshot state restoration
-- Selector probe and diagnostics capture when parsing degrades
+---
 
-## Local install
+## What it does
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked**
-4. Select this folder
-5. Open a ChatGPT or Claude conversation page
+Every time you regenerate a response or edit a message in ChatGPT or Claude, the conversation splits into a new branch. These branches are invisible by default — Chat Branch Visualizer makes them a navigable tree.
 
-## Diagnostics pipeline
+- **Branch tree** — renders every user and assistant turn as a node graph
+- **Build full tree** — auto-traverses all branches to build a complete map
+- **Navigate** — click any node to jump to that point in the conversation
+- **Fit / Zoom / Locate** — pan and zoom freely; jump to your current position
+- **Snapshot** — restores your last tree when you reopen a tab
+- **Standalone viewer** — pop the tree out into a full tab
 
-When the parser hits one of these conditions:
+Supports **ChatGPT** (chatgpt.com) and **Claude** (claude.ai).
 
-- `no_turns_detected`
-- `build_error`
-- `branch_navigation_warning`
+---
 
-the extension captures a diagnostics payload with:
+## Install
 
-- `platform`
-- `url`
-- `extensionVersion`
-- `selectorVersion`
-- `probe.hits`
-- `probe.broken`
-- `activePath`
-- `visiblePath`
-- `domSummary`
+**From the Chrome Web Store (recommended)**
+→ [Add to Chrome](https://chromewebstore.google.com/detail/chat-branch-visualizer/mahknjdihdpeceompocgcclnmjikmncb)
 
-The payload is sent to the side panel as `PROBE_RESULT`. If reporting is enabled, `background.js` also auto-posts it to your Vercel endpoint.
+**Load unpacked (development)**
 
-## Selector registry
+1. Clone this repo
+2. Open `chrome://extensions`
+3. Enable **Developer mode**
+4. Click **Load unpacked** and select the repo folder
+5. Open a ChatGPT or Claude conversation
 
-Key selectors live in [`selectors.json`](./selectors.json). The runtime parser still keeps behavior logic in code, but probe tooling and automation both read from this registry.
+---
 
-## Reporting setup
+## Project structure
 
-### 1. Configure the extension client
+```
+├── manifest.json          Extension manifest (MV3)
+├── content.js             DOM parser + branch navigator (runs in chat pages)
+├── platform-config.js     Platform detection shared across contexts
+├── reporting-config.js    Diagnostics reporting config
+├── selectors.json         CSS selector registry for both platforms
+├── background.js          Service worker — message routing + auto-reporting
+├── sidepanel.html/js/css  Side panel UI
+├── viewer.html/js/css     Standalone tree viewer
+├── api/                   Vercel serverless functions (reporting backend)
+├── scripts/               Local automation scripts
+└── .github/workflows/     Scheduled probe + report intake automation
+```
 
-Edit [`reporting-config.js`](./reporting-config.js):
+---
 
-- `enabled`: turn backend reporting on/off
-- `endpoint`: your deployed Vercel endpoint, for example `https://your-app.vercel.app/api/reports`
-- `publicKey`: optional low-trust identifier checked by the API
-- `autoSend`: auto-submit diagnostics from `background.js`
-- `manualReports`: keep `false` for now if you want feedback UI hidden
+## Diagnostics & reporting
 
-### 2. Deploy the Vercel API
+When the parser can't read the page (e.g. after a platform update changes the DOM), the extension captures a diagnostic snapshot and — if the user has opted in — sends it automatically to help identify and fix the breakage.
 
-This repo now includes:
+**What's captured:** CSS selectors, `data-testid` attributes, short text signatures (≤120 chars), extension version, page URL.
+**What's never captured:** full chat content, account information, or any data outside chatgpt.com / claude.ai.
 
-- [`api/reports.js`](./api/reports.js)
-- [`api/health.js`](./api/health.js)
+Users control reporting via the **⋯ menu → Send diagnostics** toggle. It is **off by default**.
 
-Required Vercel environment variables:
+Privacy policy: https://chat-branch-visualizer.vercel.app/privacy
 
-- `GITHUB_TOKEN`
-- `GITHUB_REPOSITORY`
+### Reporting pipeline
 
-Optional:
+```
+Extension (content.js)
+  └─ PROBE_RESULT message
+       └─ background.js  ──[POST]──▶  api/reports.js (Vercel)
+                                           └─ GitHub repository_dispatch
+                                                └─ report-intake.yml (creates/updates issue)
+```
 
-- `REPORT_PUBLIC_KEY`
+### Backend setup (Vercel)
 
-`api/reports.js` accepts extension payloads, sanitizes them, and triggers a GitHub `repository_dispatch` event:
+Required environment variables:
 
-- `extension_breakage_report`
-- `extension_user_report`
+| Variable | Description |
+|---|---|
+| `GITHUB_TOKEN` | PAT with `repo` scope |
+| `GITHUB_REPOSITORY` | e.g. `NogaUwU/chat-branch-visualizer` |
+| `REPORT_PUBLIC_KEY` | Optional — low-trust key checked against extension requests |
 
-## GitHub automation
+### GitHub Actions workflows
 
-### Scheduled probe
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `probe.yml` | Daily / manual | Runs Playwright against ChatGPT & Claude; opens issue on selector drift |
+| `report-intake.yml` | `repository_dispatch` | Creates or updates an issue from incoming extension reports |
+| `review.yml` | PR | Adds structural review comment on auto-fix PRs |
 
-[`probe.yml`](./.github/workflows/probe.yml) runs Playwright against ChatGPT / Claude using stored session cookies and opens an issue if selectors drift.
+Secrets used by `probe.yml`: `TEST_CHATGPT_URL`, `TEST_CLAUDE_URL`, `CHATGPT_SESSION_COOKIE`, `CLAUDE_SESSION_COOKIE`
 
-Secrets used by the probe workflow:
+---
 
-- `TEST_CHATGPT_URL`
-- `TEST_CLAUDE_URL`
-- `CHATGPT_SESSION_COOKIE`
-- `CLAUDE_SESSION_COOKIE`
+## Scripts
 
-### Report intake
+```bash
+npm run pack            # Build dist/chat-branch-visualizer-<version>.zip
+npm run probe           # Run selector health probe locally
+npm run check:reporting # Syntax-check API files
+```
 
-[`report-intake.yml`](./.github/workflows/report-intake.yml) listens for `repository_dispatch` and upserts an issue for incoming extension reports.
+---
 
-### Reviewer
+## Contributing
 
-[`review.yml`](./.github/workflows/review.yml) adds a lightweight structural review comment on auto-fix PRs.
-
-## Local automation scripts
-
-- `npm run probe`
-- `npm run review`
-- `npm run patch`
-- `npm run check:reporting`
-
-## Privacy / scope
-
-The reporting path is designed to send minimal diagnostics, not full chat transcripts. The captured text is limited to short signatures and DOM snippets needed for selector debugging.
+Bug reports and selector fixes are welcome. If the extension breaks after a ChatGPT or Claude update, open an issue — the diagnostics pipeline is designed to catch these automatically.
