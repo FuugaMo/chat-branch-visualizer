@@ -16,6 +16,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const AUTO_THRESHOLD = 3;
+            const BUFFER_LABEL = 'report-buffer';
             const payload = context.payload.client_payload || {};
             const report = payload.report || {};
             const diagnostics = report.diagnostics || {};
@@ -33,23 +35,37 @@ jobs:
               .slice(0, 16);
             const exactMarker = `<!-- cbv-report-digest:${exactDigest} -->`;
             const aggregateMarker = `<!-- cbv-aggregate-digest:${aggregateDigest} -->`;
-            const labels = [
-              'extension-report',
-              report.type === 'user_report' ? 'user-report' : 'auto-report',
+            const isUserReport = report.type === 'user_report';
+            const baseLabels = [
+              isUserReport ? 'user-report' : 'auto-report',
             ];
-            if ((diagnostics.probe?.broken || []).length) labels.push('selector-broken');
+            const finalLabels = [
+              'extension-report',
+              ...baseLabels,
+            ];
+            if ((diagnostics.probe?.broken || []).length) finalLabels.push('selector-broken');
 
-            const titlePrefix = report.type === 'user_report' ? '[USER]' : '[AUTO]';
-            const title = [
+            const titlePrefix = isUserReport ? '[USER]' : '[AUTO]';
+            const titleCore = [
               titlePrefix,
               diagnostics.platform || 'unknown',
               diagnostics.reason || 'breakage',
               (diagnostics.probe?.broken || []).join(', ') || 'no-broken-selectors',
             ].join(' · ');
+            const title = titleCore;
+            const bufferTitle = `[BUFFER] ${titleCore}`;
 
-            const body = [
+            const timestamp = new Date().toISOString();
+            function parseCount(body) {
+              const match = String(body || '').match(/<!-- cbv-buffer-count:(\d+) -->/);
+              return match ? Number(match[1]) : 0;
+            }
+
+            function buildBody({ count = null, promoted = false }) {
+              const lines = [
               exactMarker,
               aggregateMarker,
+              count != null ? `<!-- cbv-buffer-count:${count} -->` : '',
               '## Report Summary',
               '',
               `- Type: \`${report.type || 'auto_probe'}\``,
@@ -58,35 +74,47 @@ jobs:
               `- Selector version: \`${diagnostics.selectorVersion || 'unknown'}\``,
               `- URL: ${diagnostics.url || report.tabUrl || 'unknown'}`,
               `- Broken probes: \`${(diagnostics.probe?.broken || []).join(', ') || 'none'}\``,
-              '',
-              '## Diagnostics',
-              '',
-              '```json',
-              JSON.stringify(report, null, 2),
-              '```',
-            ].join('\n');
+              ];
+              if (count != null) {
+                lines.push(`- Aggregate count: \`${count}\``);
+              }
+              if (promoted) {
+                lines.push(`- Promoted to visible issue at: ${timestamp}`);
+              }
+              lines.push(
+                '',
+                '## Diagnostics',
+                '',
+                '```json',
+                JSON.stringify(report, null, 2),
+                '```',
+              );
+              return lines.filter(Boolean).join('\n');
+            }
 
             const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'extension-report',
               per_page: 100,
             });
 
-            const existing = issues.find(issue => (issue.body || '').includes(aggregateMarker));
-            if (existing) {
+            const matchingIssues = issues.filter(issue => (issue.body || '').includes(aggregateMarker));
+            const visibleIssue = matchingIssues.find(issue => !(issue.labels || []).some(label => (label.name || label) === BUFFER_LABEL));
+            const bufferIssue = matchingIssues.find(issue => (issue.labels || []).some(label => (label.name || label) === BUFFER_LABEL));
+
+            if (visibleIssue) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: existing.number,
+                issue_number: visibleIssue.number,
                 body: [
                   'A matching aggregated report was received again.',
                   '',
                   `- Aggregate digest: \`${aggregateDigest}\``,
                   `- Exact digest: \`${exactDigest}\``,
                   `- Event: \`${context.payload.action || context.payload.repository_dispatch?.event_type || context.payload.client_payload?.report?.type || 'repository_dispatch'}\``,
-                  `- Reported at: ${new Date().toISOString()}`,
+                  `- Reported at: ${timestamp}`,
                   `- URL: ${diagnostics.url || report.tabUrl || 'unknown'}`,
                   '',
                   '```json',
@@ -97,10 +125,58 @@ jobs:
               return;
             }
 
-            await github.rest.issues.create({
+            if (isUserReport) {
+              if (bufferIssue) {
+                const count = parseCount(bufferIssue.body) + 1;
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: bufferIssue.number,
+                  title,
+                  body: buildBody({ count, promoted: true }),
+                  labels: finalLabels,
+                });
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title,
+                  body: buildBody({ count: 1, promoted: true }),
+                  labels: finalLabels,
+                });
+              }
+              return;
+            }
+
+            if (!bufferIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: bufferTitle,
+                body: buildBody({ count: 1 }),
+                labels: [BUFFER_LABEL, ...baseLabels],
+              });
+              return;
+            }
+
+            const nextCount = parseCount(bufferIssue.body) + 1;
+            if (nextCount >= AUTO_THRESHOLD) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: bufferIssue.number,
+                title,
+                body: buildBody({ count: nextCount, promoted: true }),
+                labels: finalLabels,
+              });
+              return;
+            }
+
+            await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
-              body,
-              labels,
+              issue_number: bufferIssue.number,
+              title: bufferTitle,
+              body: buildBody({ count: nextCount }),
+              labels: [BUFFER_LABEL, ...baseLabels],
             });
