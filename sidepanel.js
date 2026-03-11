@@ -386,10 +386,17 @@ function onContentMessage(msg) {
       const wasPartial = treeCompleteness === 'partial';
       msg.turns = sanitizeTurns(msg.turns);
       msg.activePath = sanitizePathTurns(msg.activePath);
-      if (treeCompleteness !== 'full') {
-        if (msg.turns.length) mergeTurnsIntoTree(msg.turns);
-        else replaceTreeWithTurns(msg.turns);
-        setTreeCompleteness(msg.turns.length ? 'partial' : (treeLoadingMode === 'conversation' ? 'loading' : 'empty'));
+      const isFull = treeCompleteness === 'full';
+      const isSnapshot = treeSource === 'snapshot';
+      if (!isFull || !isSnapshot) {
+        if (msg.turns.length) {
+          mergeTurnsIntoTree(msg.turns);
+        } else if (!isFull) {
+          replaceTreeWithTurns(msg.turns);
+        }
+        if (!isFull) {
+          setTreeCompleteness(msg.turns.length ? 'partial' : (treeLoadingMode === 'conversation' ? 'loading' : 'empty'));
+        }
       }
       setActivePathState(msg.activePath);
       if (msg.turns.length > 0 || msg.activePath.length > 0) hideTreeLoading(false);
