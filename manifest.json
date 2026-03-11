@@ -3,7 +3,7 @@
   "name": "Chat Branch Visualizer",
   "version": "0.2.0",
   "description": "Visualize conversation branches in ChatGPT/Claude as a native sidebar.",
-  "permissions": ["storage", "sidePanel", "tabs", "clipboardWrite"],
+  "permissions": ["storage", "sidePanel", "tabs"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
