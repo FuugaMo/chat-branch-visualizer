@@ -9,6 +9,7 @@
     manualReports: false,
     requestTimeoutMs: 8000,
     dedupeWindowMs: 30 * 60 * 1000,
+    // Issue #11 follow-up: keep report settings explicit for auto-probe maintenance runs.
   };
 
   global.CBV_REPORTING_CONFIG = Object.freeze(config);
