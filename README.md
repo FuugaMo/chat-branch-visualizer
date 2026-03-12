@@ -77,32 +77,26 @@ Users control reporting via the **⋯ menu → Send diagnostics** toggle. It is 
 ### Reporting pipeline
 
 ```
-Extension (content.js)
-  └─ PROBE_RESULT message
-       └─ background.js  ──[POST]──▶  api/reports.js (Vercel)
-                                           └─ GitHub repository_dispatch
-                                                └─ report-intake.yml (creates/updates issue)
+User opts in via ⋯ menu → Send diagnostics toggle
+  └─ Extension detects breakage (content.js)
+       └─ background.js deduplicates + sanitizes
+            └─ POST ──▶ api/reports.js (Vercel)
+                             └─ GitHub repository_dispatch
+                                  └─ report-intake.yml
+                                       ├─ auto-report: buffer until 3 identical reports → visible issue
+                                       └─ user-report: immediately visible issue
+                                            └─ OpenClaw opens fix PR
+                                                 └─ Codex reviews → human approves → auto-merge
 ```
 
 ### GitHub Actions workflows
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `probe.yml` | Daily / manual | Playwright probe against ChatGPT & Claude; opens issue on selector drift |
-| `report-intake.yml` | `repository_dispatch` | Aggregates extension reports into issues (buffer → 3 reports → visible) |
+| `report-intake.yml` | `repository_dispatch` | Aggregates extension reports into issues (3× buffer → visible) |
 | `review.yml` | PR opened | Structural review comment on auto-fix PRs |
-| `codex-trigger.yml` | PR opened | Posts `@codex` mention to trigger AI review on auto-fix PRs |
+| `codex-trigger.yml` | PR opened | Triggers AI review on auto-fix PRs |
 | `auto-merge.yml` | PR approved | Squash merges auto-fix PRs after human approval |
-
-### Backend setup (Vercel)
-
-| Variable | Description |
-|----------|-------------|
-| `GITHUB_TOKEN` | PAT with `repo` scope |
-| `GITHUB_REPOSITORY` | e.g. `FuugaMo/chat-branch-visualizer` |
-| `REPORT_PUBLIC_KEY` | Optional — checked against extension requests |
-
-Secrets used by `probe.yml`: `TEST_CHATGPT_URL`, `TEST_CLAUDE_URL`, `CHATGPT_SESSION_COOKIE`, `CLAUDE_SESSION_COOKIE`
 
 ---
 
