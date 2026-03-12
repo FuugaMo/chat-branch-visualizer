@@ -36,6 +36,15 @@ jobs:
             const exactMarker = `<!-- cbv-report-digest:${exactDigest} -->`;
             const aggregateMarker = `<!-- cbv-aggregate-digest:${aggregateDigest} -->`;
             const isUserReport = report.type === 'user_report';
+            const isSyntheticTestBreakage = !isUserReport && (
+              diagnostics.reason === 'test_breakage' ||
+              String(diagnostics.selectorVersion || '').startsWith('test-')
+            );
+            if (isSyntheticTestBreakage) {
+              core.info('Skip synthetic test breakage report to avoid noisy issues.');
+              return;
+            }
+
             const baseLabels = [
               isUserReport ? 'user-report' : 'auto-report',
             ];
