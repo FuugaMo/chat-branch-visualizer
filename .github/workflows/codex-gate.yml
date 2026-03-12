@@ -23,7 +23,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const CODEX_USER = 'FuugaMo';
+            const CODEX_USER = 'chatgpt-codex-connector';
 
             // ── Resolve PR and commit SHA ──────────────────────────────────────
             let pr, sha;

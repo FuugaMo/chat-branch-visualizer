@@ -17,5 +17,5 @@ jobs:
               owner: context.repo.owner,
               repo:  context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              body: '@codex Please review this PR.',
+              body: '@codex Please review this PR. If you find no critical issues, reply with "LGTM". If you find critical issues, describe them clearly.',
             });
