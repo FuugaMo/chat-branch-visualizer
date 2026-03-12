@@ -76,33 +76,29 @@ Users control reporting via the **⋯ menu → Send diagnostics** toggle. It is 
 
 ### Reporting pipeline
 
+When breakage is detected and the user has opted in, a report flows through:
+
 ```
-Extension (content.js)
-  └─ PROBE_RESULT message
-       └─ background.js  ──[POST]──▶  api/reports.js (Vercel)
-                                           └─ GitHub repository_dispatch
-                                                └─ report-intake.yml (creates/updates issue)
+content.js detects selector breakage / build error
+  └─ PROBE_RESULT → background.js
+       ├─ Consent check (cbv_consent.autoSend must be true)
+       ├─ Deduplication (same platform+reason+broken selectors+url within 30 min → skip)
+       └─ POST ──▶ api/reports.js (Vercel)
+                        └─ repository_dispatch: extension_breakage_report
+                             └─ report-intake.yml
+                                  └─ Buffer: 3 identical reports → promoted to visible issue
+                                       └─ OpenClaw opens fix PR (auto-fix label)
+                                            └─ Codex reviews → human approves → auto-merge
 ```
 
 ### GitHub Actions workflows
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `probe.yml` | Daily / manual | Playwright probe against ChatGPT & Claude; opens issue on selector drift |
 | `report-intake.yml` | `repository_dispatch` | Aggregates extension reports into issues (buffer → 3 reports → visible) |
 | `review.yml` | PR opened | Structural review comment on auto-fix PRs |
 | `codex-trigger.yml` | PR opened | Posts `@codex` mention to trigger AI review on auto-fix PRs |
 | `auto-merge.yml` | PR approved | Squash merges auto-fix PRs after human approval |
-
-### Backend setup (Vercel)
-
-| Variable | Description |
-|----------|-------------|
-| `GITHUB_TOKEN` | PAT with `repo` scope |
-| `GITHUB_REPOSITORY` | e.g. `FuugaMo/chat-branch-visualizer` |
-| `REPORT_PUBLIC_KEY` | Optional — checked against extension requests |
-
-Secrets used by `probe.yml`: `TEST_CHATGPT_URL`, `TEST_CLAUDE_URL`, `CHATGPT_SESSION_COOKIE`, `CLAUDE_SESSION_COOKIE`
 
 ---
 
