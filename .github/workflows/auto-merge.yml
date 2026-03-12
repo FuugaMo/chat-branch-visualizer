@@ -1,0 +1,104 @@
+name: Auto-Merge on Codex + Human LGTM
+
+# Triggers when a PR review is submitted.
+# Merges if ALL of the following are true:
+#   1. PR has the auto-fix label (from OpenClaw)
+#   2. commit status codex/lgtm = success (set by codex-gate.yml)
+#   3. At least one human collaborator (not FuugaMo/Codex) has APPROVED
+
+on:
+  pull_request_review:
+    types: [submitted]
+  status:
+    # Re-check when the codex/lgtm status changes
+    # (handles the case where human approved before Codex finished)
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: read
+
+jobs:
+  merge-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const CODEX_USER = 'FuugaMo';
+
+            // ── Find target PR ─────────────────────────────────────────────────
+            let pr;
+            if (context.eventName === 'pull_request_review') {
+              pr = context.payload.pull_request;
+            } else {
+              // status event — find open auto-fix PRs for this commit
+              const sha = context.payload.sha;
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                state: 'open',
+              });
+              pr = prs.find(p =>
+                p.head.sha === sha &&
+                p.labels.some(l => l.name === 'auto-fix')
+              );
+              if (!pr) return;
+            }
+
+            const labels = (pr.labels || []).map(l => l.name);
+            if (!labels.includes('auto-fix')) return;
+            if (pr.draft) return;
+
+            // ── Check codex/lgtm commit status ────────────────────────────────
+            const { data: statuses } = await github.rest.repos.listCommitStatusesForRef({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              ref:   pr.head.sha,
+            });
+
+            const codexStatus = statuses.find(s => s.context === 'codex/lgtm');
+            if (!codexStatus || codexStatus.state !== 'success') {
+              console.log('codex/lgtm not yet success — skipping merge');
+              return;
+            }
+
+            // ── Check human approval ───────────────────────────────────────────
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner:       context.repo.owner,
+              repo:        context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            // Get the latest review state per reviewer
+            const latest = new Map();
+            for (const r of reviews) {
+              if (r.state === 'COMMENTED') continue;
+              latest.set(r.user.login, r.state);
+            }
+
+            const humanApproved = [...latest.entries()].some(
+              ([user, state]) => user !== CODEX_USER && state === 'APPROVED'
+            );
+
+            if (!humanApproved) {
+              console.log('No human approval yet — skipping merge');
+              return;
+            }
+
+            // ── All conditions met — merge ─────────────────────────────────────
+            console.log(`Merging PR #${pr.number}: Codex LGTM ✓ + human approval ✓`);
+
+            await github.rest.pulls.merge({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              pull_number:  pr.number,
+              merge_method: 'squash',
+              commit_title: `${pr.title} (#${pr.number})`,
+              commit_message: [
+                pr.body || '',
+                '',
+                `Auto-merged: Codex LGTM + human approval`,
+              ].join('\n').trim(),
+            });
