@@ -38,7 +38,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["selectors.json"],
+      "resources": ["selectors.json", "img/badge-chatgpt.png", "img/badge-claude.png"],
       "matches": ["<all_urls>"]
     }
   ],

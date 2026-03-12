@@ -30,6 +30,7 @@ const INCLUDE = [
   'viewer.css',
   'styles.css',
   'icons/',
+  'img/',
 ];
 
 fs.mkdirSync(DIST, { recursive: true });
