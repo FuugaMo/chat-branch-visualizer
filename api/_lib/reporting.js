@@ -10,13 +10,43 @@ function sanitizeText(value, limit = MAX_TEXT) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, limit);
 }
 
+function sanitizeUrlForDiagnostics(input) {
+  try {
+    const parsed = new URL(String(input || ''));
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const first = parts[0] || '';
+    const second = parts[1] || '';
+
+    if (first === 'c') return `${parsed.origin}/c/:id`;
+    if (first === 'g') return `${parsed.origin}/g/:id`;
+    if (!first) return `${parsed.origin}/`;
+    if (second) return `${parsed.origin}/${first}/${second}`;
+    return `${parsed.origin}/${first}`;
+  } catch (_) {
+    return sanitizeText(input, 120);
+  }
+}
+
+function sanitizePageLabel(inputUrl, platform = '') {
+  const base = sanitizeText(platform || 'unknown', 24) || 'unknown';
+  try {
+    const path = new URL(String(inputUrl || '')).pathname || '/';
+    if (path.includes('/c/')) return `${base}:conversation`;
+    if (path.startsWith('/g/')) return `${base}:project`;
+    if (path.startsWith('/apps')) return `${base}:apps`;
+    return `${base}:page`;
+  } catch (_) {
+    return `${base}:page`;
+  }
+}
+
 function sanitizeTurn(turn) {
   return {
     id: sanitizeText(turn?.id, 120),
     turnIndex: Number.isFinite(turn?.turnIndex) ? turn.turnIndex : null,
     branchIndex: Number.isFinite(turn?.branchIndex) ? turn.branchIndex : null,
     role: sanitizeText(turn?.role, 24),
-    text: sanitizeText(turn?.text || turn?.textSig, 120),
+    text: '',
   };
 }
 
@@ -28,7 +58,7 @@ function sanitizeDomSummary(summary) {
       tag: sanitizeText(sample?.tag, 24),
       testid: sanitizeText(sample?.testid, 80),
       cls: sanitizeText(sample?.cls, 160),
-      text: sanitizeText(sample?.text, 160),
+      text: '',
     })),
   }));
 }
@@ -38,7 +68,7 @@ function sanitizeProbe(probe) {
     platform: sanitizeText(probe?.platform, 24),
     version: sanitizeText(probe?.version, 40),
     ts: Number.isFinite(probe?.ts) ? probe.ts : null,
-    url: sanitizeText(probe?.url, MAX_TEXT),
+    url: sanitizeUrlForDiagnostics(probe?.url),
     broken: (Array.isArray(probe?.broken) ? probe.broken : []).map(item => sanitizeText(item, 60)).filter(Boolean),
     hits: probe?.hits && typeof probe.hits === 'object' ? probe.hits : {},
   };
@@ -53,7 +83,7 @@ function sanitizeDiagnostics(diagnostics) {
     platformLabel: sanitizeText(diagnostics.platformLabel, 40),
     extensionVersion: sanitizeText(diagnostics.extensionVersion, 24),
     selectorVersion: sanitizeText(diagnostics.selectorVersion, 40),
-    url: sanitizeText(diagnostics.url, MAX_TEXT),
+    url: sanitizeUrlForDiagnostics(diagnostics.url),
     ts: Number.isFinite(diagnostics.ts) ? diagnostics.ts : Date.now(),
     turnCount: Number.isFinite(diagnostics.turnCount) ? diagnostics.turnCount : 0,
     probe: sanitizeProbe(diagnostics.probe),
@@ -93,8 +123,8 @@ function parseReportBody(body) {
     type: input.type === 'user_report' ? 'user_report' : 'auto_probe',
     description: sanitizeText(input.description, MAX_DESCRIPTION),
     source: sanitizeText(input.source, 40) || 'extension',
-    tabUrl: sanitizeText(input.tabUrl, MAX_TEXT),
-    pageTitle: sanitizeText(input.pageTitle, 120),
+    tabUrl: sanitizeUrlForDiagnostics(input.tabUrl || diagnostics?.url),
+    pageTitle: sanitizePageLabel(input.tabUrl || diagnostics?.url, diagnostics?.platform),
     reportedAt: new Date().toISOString(),
     diagnostics,
     metadata: {
