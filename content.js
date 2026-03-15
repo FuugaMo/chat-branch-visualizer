@@ -21,6 +21,8 @@
       chatgpt: {
         turns: [
           "article[data-testid^='conversation-turn-']",
+          "[data-testid='conversation-turn']",
+          '[data-message-author-role]',
           '[data-message-id]',
         ],
         turnRoleAttr: 'data-turn',
@@ -556,10 +558,25 @@ function makePathEntry(turn) {
   }
 
   function readChatGPTTurns() {
-    const turns = [...document.querySelectorAll('article[data-testid^="conversation-turn-"]')];
+    let turns = [...document.querySelectorAll('article[data-testid^="conversation-turn-"]')];
+
+    if (!turns.length) {
+      const fallbackSelectors = [
+        "[data-testid='conversation-turn']",
+        '[data-message-author-role]',
+        'main article',
+      ];
+      const candidates = dedupeElements(fallbackSelectors.flatMap(sel => [...document.querySelectorAll(sel)]))
+        .filter(el => isReadableTurnCandidate(el, { minText: 2 }));
+      turns = candidates
+        .filter(el => !candidates.some(other => other !== el && other.contains(el)))
+        .sort((a, b) => rectTop(a) - rectTop(b));
+    }
+
     return turns.map((turn, idx) => {
-      const role   = turn.getAttribute('data-turn') === 'user' ? 'user' : 'assistant';
-      const msgDiv = turn.querySelector('[data-message-id]');
+      const roleAttr = turn.getAttribute('data-turn') || turn.getAttribute('data-message-author-role') || '';
+      const role   = /^user$/i.test(roleAttr) ? 'user' : 'assistant';
+      const msgDiv = turn.matches('[data-message-id]') ? turn : turn.querySelector('[data-message-id]');
       const msgId  = msgDiv?.getAttribute('data-message-id') || turn.getAttribute('data-turn-id') || null;
       const nav    = findChatGPTBranchNav(turn);
       return {
@@ -1007,6 +1024,15 @@ function makePathEntry(turn) {
     return false;
   }
 
+  function isLikelyChatConversationPage() {
+    try {
+      const path = new URL(location.href).pathname || '';
+      return path.includes('/c/');
+    } catch (_) {
+      return (location.pathname || '').includes('/c/');
+    }
+  }
+
   function syncStateToPanel(force = false) {
     const turns = serializeTurns(readRawTurns());
     if (!turns.length) {
@@ -1014,10 +1040,12 @@ function makePathEntry(turn) {
         sendToPanel({ type: 'CONVERSATION_LOADING' });
         return;
       }
-      maybeReportBreakage('no_turns_detected', {
-        phase: 'sync',
-        force,
-      });
+      if (isLikelyChatConversationPage()) {
+        maybeReportBreakage('no_turns_detected', {
+          phase: 'sync',
+          force,
+        });
+      }
       sendToPanel({ type: 'CONVERSATION_LOADING' });
       return;
     }
