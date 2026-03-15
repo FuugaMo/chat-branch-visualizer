@@ -1024,6 +1024,15 @@ function makePathEntry(turn) {
     return false;
   }
 
+  function isLikelyChatConversationPage() {
+    try {
+      const path = new URL(location.href).pathname || '';
+      return path.includes('/c/');
+    } catch (_) {
+      return (location.pathname || '').includes('/c/');
+    }
+  }
+
   function syncStateToPanel(force = false) {
     const turns = serializeTurns(readRawTurns());
     if (!turns.length) {
@@ -1031,10 +1040,12 @@ function makePathEntry(turn) {
         sendToPanel({ type: 'CONVERSATION_LOADING' });
         return;
       }
-      maybeReportBreakage('no_turns_detected', {
-        phase: 'sync',
-        force,
-      });
+      if (isLikelyChatConversationPage()) {
+        maybeReportBreakage('no_turns_detected', {
+          phase: 'sync',
+          force,
+        });
+      }
       sendToPanel({ type: 'CONVERSATION_LOADING' });
       return;
     }
