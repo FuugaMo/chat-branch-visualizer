@@ -2,7 +2,7 @@ name: Trigger Codex Review
 
 on:
   pull_request:
-    types: [opened, reopened, labeled]
+    types: [opened, reopened, labeled, synchronize]
 
 jobs:
   trigger:
@@ -13,9 +13,26 @@ jobs:
         with:
           github-token: ${{ secrets.FUUGAMO_PAT }}
           script: |
+            const prNumber = context.payload.pull_request.number;
+            const pingText = '@codex Please review this PR. If you find no critical issues, reply with "LGTM". If you find critical issues, describe them clearly.';
+
+            // 去重：如果已存在相同触发评论则跳过，避免重复@codex
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const alreadyPinged = comments.some(c => (c.body || '').includes(pingText));
+            if (alreadyPinged) {
+              core.info('Codex already pinged on this PR, skip duplicate comment.');
+              return;
+            }
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
-              repo:  context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: '@codex Please review this PR. If you find no critical issues, reply with "LGTM". If you find critical issues, describe them clearly.',
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: pingText,
             });
