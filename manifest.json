@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chat Branch Visualizer",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Visualize conversation branches in ChatGPT/Claude as a native sidebar.",
   "permissions": ["storage", "sidePanel", "tabs"],
   "host_permissions": [

@@ -1025,12 +1025,23 @@ function makePathEntry(turn) {
   }
 
   function isLikelyChatConversationPage() {
-    try {
-      const path = new URL(location.href).pathname || '';
+    const path = (() => {
+      try {
+        return new URL(location.href).pathname || '';
+      } catch (_) {
+        return location.pathname || '';
+      }
+    })();
+
+    if (PLATFORM === 'chatgpt') {
       return path.includes('/c/');
-    } catch (_) {
-      return (location.pathname || '').includes('/c/');
     }
+
+    if (PLATFORM === 'claude') {
+      return path.startsWith('/chat/');
+    }
+
+    return false;
   }
 
   function syncStateToPanel(force = false) {
