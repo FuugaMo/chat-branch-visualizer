@@ -4,7 +4,7 @@
 
 **Visualize your ChatGPT and Claude conversation branches as an interactive tree — in Chrome's native side panel.**
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v0.3.3-blue?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/chat-branch-visualizer/mahknjdihdpeceompocgcclnmjikmncb)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v0.3.4-blue?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/chat-branch-visualizer/mahknjdihdpeceompocgcclnmjikmncb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
