@@ -1,13 +1,16 @@
 {
-  "version": "0.3.6",
-  "lastVerified": "2026-04-11",
+  "version": "0.3.7",
+  "lastVerified": "2026-05-29",
   "platforms": {
     "chatgpt": {
       "turns": [
         "article[data-testid^='conversation-turn-']",
         "[data-testid='conversation-turn']",
         "[data-message-author-role]",
-        "[data-message-id]"
+        "[data-message-id]",
+        "div[class*=\"agent-turn\"]",
+        "[data-testid*=\"conversation-turn\"]",
+        ".group\\/conversation-turn"
       ],
       "turnRoleAttr": "data-turn",
       "messageIdAttr": "data-message-id",
@@ -36,7 +39,8 @@
         "[class*='human-turn']",
         "[class*='HumanTurn']",
         ".font-user-message",
-        "[class*=\"user-message\"]"
+        "[class*=\"user-message\"]",
+        "div[data-is-user=\"true\"]"
       ],
       "assistantTurn": [
         "[data-testid='assistant-turn']",
