@@ -7,11 +7,17 @@
         "article[data-testid^='conversation-turn-']",
         "[data-testid='conversation-turn']",
         "[data-message-author-role]",
-        "[data-message-id]"
+        "[data-message-id]",
+        ".conversation-turn",
+        "[data-role]"
       ],
       "turnRoleAttr": {
         "type": "attr",
-        "names": ["data-message-author-role", "data-turn"]
+        "names": [
+          "data-message-author-role",
+          "data-turn",
+          "data-role"
+        ]
       },
       "messageIdAttr": {
         "type": "attr",
