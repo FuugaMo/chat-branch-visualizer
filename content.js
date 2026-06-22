@@ -14,6 +14,10 @@
   const DIAGNOSTIC_SNIPPET_LIMIT = 6;
   const PLATFORM      = detectPlatform();
   const EXT_VERSION   = chrome.runtime.getManifest().version;
+  const OPTIONAL_PROBE_KEYS = {
+    chatgpt: new Set(['messageIdAttr', 'branchCounter', 'branchPrev', 'branchNext', 'scrollHost']),
+    claude: new Set(['branchCounter', 'branchPrev', 'branchNext', 'scrollHost']),
+  };
   const DEFAULT_SELECTORS = {
     version: EXT_VERSION,
     lastVerified: null,
@@ -21,10 +25,11 @@
       chatgpt: {
         turns: [
           "article[data-testid^='conversation-turn-']",
+          '[data-message-author-role]',
           '[data-message-id]',
         ],
-        turnRoleAttr: 'data-turn',
-        messageIdAttr: 'data-message-id',
+        turnRoleAttr: { type: 'attr', names: ['data-message-author-role', 'data-turn'] },
+        messageIdAttr: { type: 'attr', name: 'data-message-id' },
         branchCounter: { type: 'regex', pattern: '^\\d+\\s*/\\s*\\d+$' },
         branchPrev: ["[aria-label*='prev' i]", "[aria-label*='previous' i]", "[aria-label*='earlier' i]"],
         branchNext: ["[aria-label*='next' i]", "[aria-label*='later' i]"],
@@ -161,7 +166,7 @@ function makePathEntry(turn) {
     }
 
     const broken = Object.entries(hits)
-      .filter(([, value]) => isProbeValueBroken(value))
+      .filter(([key, value]) => !isOptionalProbeKey(platform, key) && isProbeValueBroken(value))
       .map(([key]) => key);
 
     return {
@@ -178,6 +183,7 @@ function makePathEntry(turn) {
     if (typeof sel === 'string') return safeQueryCount(sel);
     if (Array.isArray(sel)) return sel.map(entry => probeSelectorValue(entry));
     if (sel?.type === 'regex') return countRegexTextMatches(sel.pattern);
+    if (sel?.type === 'attr') return countAttributeMatches(sel);
     if (sel && typeof sel === 'object' && typeof sel.selector === 'string') {
       return safeQueryCount(sel.selector);
     }
@@ -204,6 +210,21 @@ function makePathEntry(turn) {
     } catch (_) {
       return -1;
     }
+  }
+
+  function countAttributeMatches({ name, names, selector = '*' }) {
+    const attrNames = Array.isArray(names) ? names : [name];
+    try {
+      return [...document.querySelectorAll(selector)].filter(el =>
+        attrNames.some(attr => attr && el.hasAttribute(attr))
+      ).length;
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  function isOptionalProbeKey(platform, key) {
+    return OPTIONAL_PROBE_KEYS[platform]?.has(key) || false;
   }
 
   function isProbeValueBroken(value) {
@@ -255,10 +276,10 @@ function makePathEntry(turn) {
 
   function collectDomSummary() {
     const selectors = {
-      turnArticles: "article[data-testid^='conversation-turn-']",
+      turnArticles: "article[data-testid^='conversation-turn-'], [data-message-author-role]",
       messageIds: '[data-message-id]',
-      userMessages: "[data-testid='user-message'], [class*='font-user-message']",
-      assistantTurns: "[data-testid='assistant-turn'], [data-testid='assistant-message'], .font-claude-response",
+      userMessages: "[data-testid='user-message'], [data-testid*='user-message'], [data-message-author-role='user'], [class*='font-user-message']",
+      assistantTurns: "[data-testid='assistant-turn'], [data-testid='assistant-message'], [data-message-author-role='assistant'], .font-claude-response, .standard-markdown",
       branchCounters: 'span, div',
     };
     return Object.entries(selectors).map(([label, selector]) => {
@@ -557,23 +578,46 @@ function makePathEntry(turn) {
 
   function readChatGPTTurns() {
     const turns = [...document.querySelectorAll('article[data-testid^="conversation-turn-"]')];
-    return turns.map((turn, idx) => {
-      const role   = turn.getAttribute('data-turn') === 'user' ? 'user' : 'assistant';
-      const msgDiv = turn.querySelector('[data-message-id]');
-      const msgId  = msgDiv?.getAttribute('data-message-id') || turn.getAttribute('data-turn-id') || null;
-      const nav    = findChatGPTBranchNav(turn);
-      return {
-        turnIndex:   idx,
-        domId:       msgId,
-        role,
-        text:        extractText(msgDiv || turn),
-        branchIndex: nav?.current ?? 1,
-        branchTotal: nav?.total   ?? 1,
-        prevBtn:     nav?.prevBtn ?? null,
-        nextBtn:     nav?.nextBtn ?? null,
-        article:     turn,
-      };
-    });
+    if (turns.length) return turns.map(mapChatGPTTurn);
+
+    const messageTurns = getChatGPTMessageTurns();
+    if (!messageTurns.length) return readGenericTurns();
+    return messageTurns.map(mapChatGPTTurn);
+  }
+
+  function getChatGPTMessageTurns() {
+    return dedupeElements(selectTopLevelCandidates([
+      '[data-message-author-role]',
+      '[data-testid*="conversation-turn"]',
+      '[data-testid*="message"]',
+    ])
+      .filter(el => isReadableTurnCandidate(el, { minText: 2 })))
+      .sort((a, b) => rectTop(a) - rectTop(b));
+  }
+
+  function mapChatGPTTurn(turn, idx) {
+    const roleSource = turn.matches?.('[data-message-author-role]')
+      ? turn
+      : turn.querySelector?.('[data-message-author-role]');
+    const roleValue = roleSource?.getAttribute('data-message-author-role') || turn.getAttribute('data-turn') || '';
+    const role = roleValue === 'user' ? 'user' : 'assistant';
+    const msgDiv = turn.querySelector?.('[data-message-id]') || null;
+    const msgId = msgDiv?.getAttribute('data-message-id')
+      || turn.getAttribute('data-message-id')
+      || turn.getAttribute('data-turn-id')
+      || null;
+    const nav = findChatGPTBranchNav(turn);
+    return {
+      turnIndex:   idx,
+      domId:       msgId,
+      role,
+      text:        extractText(msgDiv || turn),
+      branchIndex: nav?.current ?? 1,
+      branchTotal: nav?.total   ?? 1,
+      prevBtn:     nav?.prevBtn ?? null,
+      nextBtn:     nav?.nextBtn ?? null,
+      article:     turn,
+    };
   }
 
   // ── Claude turn reading ───────────────────────────────────────────────────────
@@ -582,7 +626,10 @@ function makePathEntry(turn) {
   // each branch is considered a child of that branch.
   function readClaudeTurns() {
     const userEls = getClaudeUserTurns();
-    if (!userEls.length) return readGenericTurns();
+    if (!userEls.length) {
+      const assistantOnly = getClaudeAssistantFallbackTurns();
+      return assistantOnly.length ? assistantOnly : readGenericTurns();
+    }
 
     const assistantGroups = getClaudeAssistantGroups(userEls);
     const turns = [];
@@ -624,14 +671,33 @@ function makePathEntry(turn) {
   function getClaudeUserTurns() {
     const selectors = [
       '[data-testid="user-message"]',
+      '[data-testid*="user-message"]',
       '[class*="font-user-message"]',
       '[data-testid="human-turn"]',
+      '[data-testid*="human"]',
+      '[data-message-author-role="user"]',
       '[class*="human-turn"]',
       '[class*="HumanTurn"]',
+      '[class*="UserMessage"]',
     ];
     return dedupeElements(selectTopLevelCandidates(selectors)
       .filter(el => isReadableTurnCandidate(el, { minText: 2 })))
       .sort((a, b) => rectTop(a) - rectTop(b));
+  }
+
+  function getClaudeAssistantFallbackTurns() {
+    const candidates = getTopLevelCandidates(getClaudeAssistantCandidates([]));
+    return candidates.map((el, idx) => ({
+      turnIndex:   idx,
+      domId:       el.getAttribute('data-message-id') || null,
+      role:        'assistant',
+      text:        extractText(el),
+      branchIndex: 1,
+      branchTotal: 1,
+      prevBtn:     null,
+      nextBtn:     null,
+      article:     el,
+    }));
   }
 
   function getClaudeAssistantGroups(userEls) {
@@ -715,6 +781,11 @@ function makePathEntry(turn) {
         return style.position !== 'absolute' && style.position !== 'fixed';
       })
       .sort((a, b) => rectTop(a) - rectTop(b));
+  }
+
+  function getTopLevelCandidates(elements) {
+    const all = dedupeElements(elements);
+    return all.filter(el => !all.some(other => other !== el && other.contains(el)));
   }
 
   function readGenericTurns() {

@@ -1,14 +1,21 @@
 {
-  "version": "0.3.0",
-  "lastVerified": "2026-03-11",
+  "version": "0.3.7",
+  "lastVerified": "2026-06-22",
   "platforms": {
     "chatgpt": {
       "turns": [
         "article[data-testid^='conversation-turn-']",
+        "[data-message-author-role]",
         "[data-message-id]"
       ],
-      "turnRoleAttr": "data-turn",
-      "messageIdAttr": "data-message-id",
+      "turnRoleAttr": {
+        "type": "attr",
+        "names": ["data-message-author-role", "data-turn"]
+      },
+      "messageIdAttr": {
+        "type": "attr",
+        "name": "data-message-id"
+      },
       "branchCounter": {
         "type": "regex",
         "pattern": "^\\d+\\s*/\\s*\\d+$"
@@ -29,10 +36,14 @@
     "claude": {
       "humanTurn": [
         "[data-testid='user-message']",
+        "[data-testid*='user-message']",
         "[data-testid='human-turn']",
+        "[data-testid*='human']",
+        "[data-message-author-role='user']",
         "[class*='font-user-message']",
         "[class*='human-turn']",
-        "[class*='HumanTurn']"
+        "[class*='HumanTurn']",
+        "[class*='UserMessage']"
       ],
       "assistantTurn": [
         "[data-testid='assistant-turn']",

@@ -9,6 +9,10 @@ const selectors = require('../selectors.json');
 const ROOT = process.cwd();
 const OUTFILE = path.join(ROOT, 'probe-result.json');
 const EXTENSION_PATH = ROOT;
+const OPTIONAL_PROBE_KEYS = {
+  chatgpt: new Set(['messageIdAttr', 'branchCounter', 'branchPrev', 'branchNext', 'scrollHost']),
+  claude: new Set(['branchCounter', 'branchPrev', 'branchNext', 'scrollHost']),
+};
 
 const TARGETS = [
   {
@@ -49,7 +53,8 @@ function parseCookieHeader(header, url) {
 
 async function runProbe(page, platform) {
   const config = selectors.platforms[platform];
-  return page.evaluate(({ cfg, platform, version }) => {
+  const optionalKeys = [...(OPTIONAL_PROBE_KEYS[platform] || new Set())];
+  return page.evaluate(({ cfg, optionalKeys, platform, version }) => {
     function queryCount(selector) {
       try {
         return document.querySelectorAll(selector).length;
@@ -69,10 +74,22 @@ async function runProbe(page, platform) {
       }
     }
 
+    function attrCount({ name, names, selector = '*' }) {
+      const attrNames = Array.isArray(names) ? names : [name];
+      try {
+        return [...document.querySelectorAll(selector)].filter(el =>
+          attrNames.some(attr => attr && el.hasAttribute(attr))
+        ).length;
+      } catch (_) {
+        return -1;
+      }
+    }
+
     function probeValue(value) {
       if (typeof value === 'string') return queryCount(value);
       if (Array.isArray(value)) return value.map(probeValue);
       if (value && typeof value === 'object' && value.type === 'regex') return regexCount(value.pattern);
+      if (value && typeof value === 'object' && value.type === 'attr') return attrCount(value);
       if (value && typeof value === 'object' && typeof value.selector === 'string') return queryCount(value.selector);
       return null;
     }
@@ -92,10 +109,13 @@ async function runProbe(page, platform) {
       title: document.title,
       ts: Date.now(),
       hits,
-      broken: Object.entries(hits).filter(([, value]) => broken(value)).map(([key]) => key),
+      broken: Object.entries(hits)
+        .filter(([key, value]) => !optionalKeys.includes(key) && broken(value))
+        .map(([key]) => key),
     };
   }, {
     cfg: config,
+    optionalKeys,
     platform,
     version: selectors.version,
   });
