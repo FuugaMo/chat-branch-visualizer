@@ -5,6 +5,7 @@
     "chatgpt": {
       "turns": [
         "article[data-testid^='conversation-turn-']",
+        "[data-testid='conversation-turn']",
         "[data-message-author-role]",
         "[data-message-id]"
       ],
@@ -43,7 +44,9 @@
         "[class*='font-user-message']",
         "[class*='human-turn']",
         "[class*='HumanTurn']",
-        "[class*='UserMessage']"
+        "[class*='UserMessage']",
+        ".font-user-message",
+        "[class*=\"user-message\"]"
       ],
       "assistantTurn": [
         "[data-testid='assistant-turn']",
@@ -60,12 +63,14 @@
       "branchPrev": [
         "[aria-label*='prev' i]",
         "[aria-label*='previous' i]",
-        "[aria-label*='上一']"
+        "[aria-label*='上一']",
+        "[aria-label*=\"previous\"]"
       ],
       "branchNext": [
         "[aria-label*='next' i]",
         "[aria-label*='later' i]",
-        "[aria-label*='下一']"
+        "[aria-label*='下一']",
+        "[aria-label*=\"next\"]"
       ],
       "scrollHost": [
         "main"

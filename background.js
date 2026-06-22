@@ -39,6 +39,37 @@ function sanitizeText(value, limit = 240) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, limit);
 }
 
+function sanitizeUrlForDiagnostics(input) {
+  try {
+    const parsed = new URL(String(input || ''));
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const first = parts[0] || '';
+    const second = parts[1] || '';
+
+    // Keep only route pattern, remove concrete identifiers/query/hash.
+    if (first === 'c') return `${parsed.origin}/c/:id`;
+    if (first === 'g') return `${parsed.origin}/g/:id`;
+    if (!first) return `${parsed.origin}/`;
+    if (second) return `${parsed.origin}/${first}/${second}`;
+    return `${parsed.origin}/${first}`;
+  } catch (_) {
+    return sanitizeText(input || '', 120);
+  }
+}
+
+function sanitizePageLabel(inputUrl, platform = '') {
+  const base = sanitizeText(platform || 'unknown', 24) || 'unknown';
+  try {
+    const path = new URL(String(inputUrl || '')).pathname || '/';
+    if (path.includes('/c/')) return `${base}:conversation`;
+    if (path.startsWith('/g/')) return `${base}:project`; 
+    if (path.startsWith('/apps')) return `${base}:apps`;
+    return `${base}:page`;
+  } catch (_) {
+    return `${base}:page`;
+  }
+}
+
 function pruneReportedDiagnostics(now = Date.now()) {
   const ttl = Number(getReportingConfig().dedupeWindowMs) || (30 * 60 * 1000);
   for (const [key, ts] of reportedDiagnostics.entries()) {
@@ -81,7 +112,7 @@ function sanitizeTurn(turn) {
     turnIndex: Number.isFinite(turn?.turnIndex) ? turn.turnIndex : null,
     branchIndex: Number.isFinite(turn?.branchIndex) ? turn.branchIndex : null,
     role: sanitizeText(turn?.role, 24),
-    text: sanitizeText(turn?.text || turn?.textSig, 120),
+    text: '',
   };
 }
 
@@ -94,14 +125,14 @@ function sanitizeDiagnostics(diagnostics) {
     platformLabel: sanitizeText(diagnostics.platformLabel, 40),
     extensionVersion: sanitizeText(diagnostics.extensionVersion, 24),
     selectorVersion: sanitizeText(diagnostics.selectorVersion, 40),
-    url: sanitizeText(diagnostics.url, 240),
+    url: sanitizeUrlForDiagnostics(diagnostics.url),
     ts: Number.isFinite(diagnostics.ts) ? diagnostics.ts : Date.now(),
     turnCount: Number.isFinite(diagnostics.turnCount) ? diagnostics.turnCount : 0,
     probe: {
       platform: sanitizeText(diagnostics.probe?.platform, 24),
       version: sanitizeText(diagnostics.probe?.version, 40),
       ts: Number.isFinite(diagnostics.probe?.ts) ? diagnostics.probe.ts : null,
-      url: sanitizeText(diagnostics.probe?.url, 240),
+      url: sanitizeUrlForDiagnostics(diagnostics.probe?.url),
       hits: diagnostics.probe?.hits && typeof diagnostics.probe.hits === 'object' ? diagnostics.probe.hits : {},
       broken: (Array.isArray(diagnostics.probe?.broken) ? diagnostics.probe.broken : []).map(item => sanitizeText(item, 60)),
     },
@@ -115,7 +146,7 @@ function sanitizeDiagnostics(diagnostics) {
         tag: sanitizeText(sample?.tag, 24),
         testid: sanitizeText(sample?.testid, 80),
         cls: sanitizeText(sample?.cls, 160),
-        text: sanitizeText(sample?.text, 160),
+        text: '',
       })),
     })),
   };
@@ -169,8 +200,8 @@ async function postReport({ type, diagnostics, description = '', sender }) {
         client: 'chrome-extension',
         publicKey: config.publicKey || '',
         description: sanitizeText(description, 1500),
-        tabUrl: sanitizeText(sender?.tab?.url || sanitized.url, 240),
-        pageTitle: sanitizeText(sender?.tab?.title || '', 120),
+        tabUrl: sanitizeUrlForDiagnostics(sender?.tab?.url || sanitized.url),
+        pageTitle: sanitizePageLabel(sender?.tab?.url || sanitized.url, sanitized.platform),
         extensionVersion: sanitizeText(sanitized.extensionVersion, 24),
         selectorVersion: sanitizeText(sanitized.selectorVersion, 40),
         diagnostics: sanitized,

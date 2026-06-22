@@ -25,6 +25,7 @@
       chatgpt: {
         turns: [
           "article[data-testid^='conversation-turn-']",
+          "[data-testid='conversation-turn']",
           '[data-message-author-role]',
           '[data-message-id]',
         ],
@@ -38,10 +39,16 @@
       claude: {
         humanTurn: [
           "[data-testid='user-message']",
+          "[data-testid*='user-message']",
           "[data-testid='human-turn']",
+          "[data-testid*='human']",
+          "[data-message-author-role='user']",
           "[class*='font-user-message']",
           "[class*='human-turn']",
           "[class*='HumanTurn']",
+          "[class*='UserMessage']",
+          '.font-user-message',
+          '[class*="user-message"]',
         ],
         assistantTurn: [
           "[data-testid='assistant-turn']",
@@ -588,8 +595,10 @@ function makePathEntry(turn) {
   function getChatGPTMessageTurns() {
     return dedupeElements(selectTopLevelCandidates([
       '[data-message-author-role]',
+      "[data-testid='conversation-turn']",
       '[data-testid*="conversation-turn"]',
       '[data-testid*="message"]',
+      'main article',
     ])
       .filter(el => isReadableTurnCandidate(el, { minText: 2 })))
       .sort((a, b) => rectTop(a) - rectTop(b));
@@ -681,7 +690,7 @@ function makePathEntry(turn) {
       '[class*="UserMessage"]',
     ];
     return dedupeElements(selectTopLevelCandidates(selectors)
-      .filter(el => isReadableTurnCandidate(el, { minText: 2 })))
+      .filter(el => isReadableTurnCandidate(el, { minText: 0 })))
       .sort((a, b) => rectTop(a) - rectTop(b));
   }
 
@@ -1078,6 +1087,26 @@ function makePathEntry(turn) {
     return false;
   }
 
+  function isLikelyChatConversationPage() {
+    const path = (() => {
+      try {
+        return new URL(location.href).pathname || '';
+      } catch (_) {
+        return location.pathname || '';
+      }
+    })();
+
+    if (PLATFORM === 'chatgpt') {
+      return path.includes('/c/');
+    }
+
+    if (PLATFORM === 'claude') {
+      return path.startsWith('/chat/');
+    }
+
+    return false;
+  }
+
   function syncStateToPanel(force = false) {
     const turns = serializeTurns(readRawTurns());
     if (!turns.length) {
@@ -1085,10 +1114,12 @@ function makePathEntry(turn) {
         sendToPanel({ type: 'CONVERSATION_LOADING' });
         return;
       }
-      maybeReportBreakage('no_turns_detected', {
-        phase: 'sync',
-        force,
-      });
+      if (isLikelyChatConversationPage()) {
+        maybeReportBreakage('no_turns_detected', {
+          phase: 'sync',
+          force,
+        });
+      }
       sendToPanel({ type: 'CONVERSATION_LOADING' });
       return;
     }
