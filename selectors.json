@@ -7,7 +7,9 @@
         "article[data-testid^='conversation-turn-']",
         "[data-testid='conversation-turn']",
         "[data-message-author-role]",
-        "[data-message-id]"
+        "[data-message-id]",
+        "div[class*=\"agent-turn\"]",
+        "[data-testid*=\"conversation-turn\"]"
       ],
       "turnRoleAttr": {
         "type": "attr",
@@ -46,7 +48,8 @@
         "[class*='HumanTurn']",
         "[class*='UserMessage']",
         ".font-user-message",
-        "[class*=\"user-message\"]"
+        "[class*=\"user-message\"]",
+        "div[data-is-user=\"true\"]"
       ],
       "assistantTurn": [
         "[data-testid='assistant-turn']",
