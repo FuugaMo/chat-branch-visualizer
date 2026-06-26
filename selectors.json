@@ -11,7 +11,10 @@
       ],
       "turnRoleAttr": {
         "type": "attr",
-        "names": ["data-message-author-role", "data-turn"]
+        "names": [
+          "data-message-author-role",
+          "data-turn"
+        ]
       },
       "messageIdAttr": {
         "type": "attr",
@@ -46,7 +49,10 @@
         "[class*='HumanTurn']",
         "[class*='UserMessage']",
         ".font-user-message",
-        "[class*=\"user-message\"]"
+        "[class*=\"user-message\"]",
+        "div[data-is-user='true']",
+        ".user-message",
+        "[class*='user-message']"
       ],
       "assistantTurn": [
         "[data-testid='assistant-turn']",
@@ -54,7 +60,11 @@
         ".font-claude-response",
         ".font-claude-response-body",
         ".standard-markdown",
-        "[class*='font-claude-message']"
+        "[class*='font-claude-message']",
+        "[data-message-author-role='assistant']",
+        "div[data-is-user='false']",
+        ".assistant-message",
+        "[class*='assistant-message']"
       ],
       "branchCounter": {
         "type": "regex",
